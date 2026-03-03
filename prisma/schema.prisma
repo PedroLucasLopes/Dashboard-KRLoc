@@ -1,0 +1,79 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Equipment {
+  id          String          @id @default(uuid())
+  name        String
+  code        String
+  p_diary     Float
+  p_weekly    Float?
+  p_biweekly  Float?
+  p_monthly   Float?
+  p_indemnity Float
+  status      StatusEquipment @default(AVAILABLE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  suffix      Int             @unique @default(autoincrement())
+  eleases     ELease[]
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?  @unique
+  phone     String?
+  tax_id    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lessee    Lessee?
+}
+
+model Lessee {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  zipcode   String
+  city      String?
+  country   String?
+  clientId  String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  eleases   ELease[]
+  client    Client   @relation(fields: [clientId], references: [id])
+}
+
+model ELease {
+  id          String      @id @default(uuid())
+  equipmentId String
+  lesseeId    String
+  startDate   DateTime
+  endDate     DateTime
+  finishDate  DateTime
+  status      LeaseStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  equipment   Equipment   @relation(fields: [equipmentId], references: [id])
+  lessee      Lessee      @relation(fields: [lesseeId], references: [id])
+}
+
+enum StatusEquipment {
+  AVAILABLE
+  LEASED
+  MAINTENANCE
+  RETIRED
+  STOLEN
+}
+
+enum LeaseStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  PENDING
+}
