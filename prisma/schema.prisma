@@ -32,7 +32,7 @@ model Client {
   tax_id    String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  lessee    Lessee?
+  lessees   Lessee[]
 }
 
 model Lessee {
@@ -42,7 +42,7 @@ model Lessee {
   zipcode   String
   city      String?
   country   String?
-  clientId  String   @unique
+  clientId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   eleases   ELease[]

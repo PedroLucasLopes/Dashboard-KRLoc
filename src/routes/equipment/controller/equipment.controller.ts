@@ -3,34 +3,46 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Put,
   Query,
+  UploadedFile,
   UseFilters,
+  UseInterceptors,
 } from '@nestjs/common';
 import { EquipmentService } from '../service/equipment.service';
 import { Equipment } from 'generated/prisma/client';
-import { PrismaExceptionValidationFilter } from 'src/error/prismacientvalidationerror.exception';
+import { PrismaExceptionValidationFilter } from 'src/global/error/prismacientvalidationerror.exception';
 import { CreateEquipmentDto } from '../dto/createEquipment.dto';
 import { EditEquipmentDto } from '../dto/editEquipment.dto';
-import { PaginationDTO } from 'src/dto/PaginationDTO.dto';
+import { FilterEquipmentDTO } from '../dto/filterequipment.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { FileSizeValidationPipe } from '../service/filevalidation.service';
+import { CsvImport } from 'src/global/types/csvImport';
 
 @Controller('/equipment')
 export class EquipmentController {
   constructor(private readonly equipmentService: EquipmentService) {}
 
   @Get()
-  async findAll(@Query() paginationDto: PaginationDTO): Promise<Equipment[]> {
-    return await this.equipmentService.findAll(paginationDto);
+  @HttpCode(HttpStatus.OK)
+  async findAll(
+    @Query() FilterEquipmentDTO: FilterEquipmentDTO,
+  ): Promise<Equipment[]> {
+    return await this.equipmentService.findAll(FilterEquipmentDTO);
   }
 
   @Get(':id')
+  @HttpCode(HttpStatus.OK)
   async findById(@Param('id') id: string): Promise<Equipment> {
     return await this.equipmentService.findById(id);
   }
 
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   @UseFilters(new PrismaExceptionValidationFilter())
   async createEquipment(
     @Body() createEquipmentDto: CreateEquipmentDto,
@@ -38,7 +50,17 @@ export class EquipmentController {
     return await this.equipmentService.createEquipment(createEquipmentDto);
   }
 
+  @Post('upload')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FileInterceptor('file'))
+  async importCsv(
+    @UploadedFile(new FileSizeValidationPipe()) file: Express.Multer.File,
+  ): Promise<CsvImport> {
+    return await this.equipmentService.importCsv(file);
+  }
+
   @Put(':id')
+  @HttpCode(HttpStatus.OK)
   async editEquipment(
     @Param('id') id: string,
     @Body() data: EditEquipmentDto,
@@ -47,6 +69,7 @@ export class EquipmentController {
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteEquipment(@Param('id') id: string): Promise<void> {
     await this.equipmentService.deleteEquipment(id);
   }
