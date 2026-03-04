@@ -6,19 +6,23 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseFilters,
 } from '@nestjs/common';
 import { EquipmentService } from '../service/equipment.service';
 import { Equipment } from 'generated/prisma/client';
 import { PrismaExceptionValidationFilter } from 'src/error/prismacientvalidationerror.exception';
+import { CreateEquipmentDto } from '../dto/createEquipment.dto';
+import { EditEquipmentDto } from '../dto/editEquipment.dto';
+import { PaginationDTO } from 'src/dto/PaginationDTO.dto';
 
 @Controller('/equipment')
 export class EquipmentController {
   constructor(private readonly equipmentService: EquipmentService) {}
 
   @Get()
-  async findAll(): Promise<Equipment[]> {
-    return await this.equipmentService.findAll();
+  async findAll(@Query() paginationDto: PaginationDTO): Promise<Equipment[]> {
+    return await this.equipmentService.findAll(paginationDto);
   }
 
   @Get(':id')
@@ -28,14 +32,16 @@ export class EquipmentController {
 
   @Post()
   @UseFilters(new PrismaExceptionValidationFilter())
-  async createEquipment(@Body() data: Equipment): Promise<Equipment> {
-    return await this.equipmentService.createEquipment(data);
+  async createEquipment(
+    @Body() createEquipmentDto: CreateEquipmentDto,
+  ): Promise<Equipment> {
+    return await this.equipmentService.createEquipment(createEquipmentDto);
   }
 
   @Put(':id')
   async editEquipment(
     @Param('id') id: string,
-    @Body() data: Equipment,
+    @Body() data: EditEquipmentDto,
   ): Promise<Equipment> {
     return await this.equipmentService.editEquipment(id, data);
   }

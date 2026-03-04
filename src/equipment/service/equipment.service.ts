@@ -1,17 +1,22 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Equipment, StatusEquipment } from 'generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { validateCode } from '../utils/validateCode.utils';
+import { CreateEquipmentDto } from '../dto/createEquipment.dto';
+import { EditEquipmentDto } from '../dto/editEquipment.dto';
+import { PaginationDTO } from 'src/dto/PaginationDTO.dto';
+import { PaginationConfig } from 'src/utils/pagination.utils';
 
 @Injectable()
 export class EquipmentService {
   constructor(private prisma: PrismaService) {}
-  async findAll(): Promise<Equipment[]> {
-    const equipments: Equipment[] = await this.prisma.equipment.findMany();
+  async findAll(paginationDto?: PaginationDTO): Promise<Equipment[]> {
+    const { page, limit } = PaginationConfig(paginationDto);
+    const equipments: Equipment[] = await this.prisma.equipment.findMany({
+      skip: limit,
+      take: page,
+      orderBy: { suffix: paginationDto?.order },
+    });
 
     if (equipments.length === 0) {
       throw new NotFoundException('No equipment found');
@@ -32,18 +37,12 @@ export class EquipmentService {
     return equipment;
   }
 
-  async createEquipment(data: Equipment): Promise<Equipment> {
+  async createEquipment(data: CreateEquipmentDto): Promise<Equipment> {
     const code: string = validateCode(data.code);
-    const equipmentValidated: Equipment = {
+    const equipmentValidated: CreateEquipmentDto = {
       ...data,
       code,
     };
-
-    if (data.suffix) {
-      throw new BadRequestException(
-        'The suffix field is not allowed to be filled',
-      );
-    }
 
     const equipment: Equipment = await this.prisma.equipment.create({
       data: equipmentValidated,
@@ -52,17 +51,11 @@ export class EquipmentService {
     return equipment;
   }
 
-  async editEquipment(id: string, data: Equipment): Promise<Equipment> {
-    const updateData: Equipment = { ...data };
+  async editEquipment(id: string, data: EditEquipmentDto): Promise<Equipment> {
+    const updateData: EditEquipmentDto = { ...data };
 
     if (data.code) {
       updateData.code = validateCode(data.code);
-    }
-
-    if (data.suffix) {
-      throw new BadRequestException(
-        'The suffix field is not allowed to be updated',
-      );
     }
 
     return this.prisma.equipment.update({
