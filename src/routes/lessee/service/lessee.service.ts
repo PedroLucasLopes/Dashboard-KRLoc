@@ -12,6 +12,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { ZipcodeInfo } from '../types/zipcodevalidator';
 import { normalizeAddress } from '../utils/normalizeAdress.utils';
+import { EditLesseeDto } from '../dto/editLessee.dto';
 
 @Injectable()
 export class LesseeService {
@@ -89,11 +90,10 @@ export class LesseeService {
       throw new BadRequestException('This client does not exist!');
     }
 
-    if (
-      normalizeAddress(data.address) !== normalizeAddress(zipCode.logradouro)
-    ) {
-      throw new BadRequestException('The address dont match with this zipcode');
-    }
+    this.validateAddressField(zipCode.logradouro, data.address);
+    this.validateAddressField(zipCode.localidade, data?.city);
+    this.validateAddressField(zipCode.bairro, data?.neighborhood);
+    this.validateAddressField(zipCode.uf, data?.state);
 
     const createLessee = await this.prisma.lessee.create({
       data: {
@@ -110,7 +110,90 @@ export class LesseeService {
     return createLessee;
   }
 
-  async checkZipCode(zipcode: string): Promise<ZipcodeInfo> {
+  async updateLessee(id: string, data: EditLesseeDto): Promise<Lessee> {
+    const lesseeExists = await this.prisma.lessee.findUnique({
+      where: { id },
+    });
+
+    if (!lesseeExists) {
+      throw new BadRequestException('This lessee does not exist!');
+    }
+
+    this.validateAddressField(lesseeExists?.address, data?.address);
+    this.validateAddressField(lesseeExists?.city, data?.city);
+    this.validateAddressField(lesseeExists?.neighborhood, data?.neighborhood);
+    this.validateAddressField(lesseeExists?.state, data?.state);
+
+    const validatedData: EditLesseeDto = { ...data };
+
+    const bodyZipCode = data.zipcode && data.zipcode.replace(/-/g, '');
+
+    if (data.zipcode && bodyZipCode !== lesseeExists.zipcode) {
+      const { cep, logradouro, localidade, bairro, uf } =
+        await this.checkZipCode(data.zipcode);
+      this.validateAddressField(cep, data?.state);
+      this.validateAddressField(logradouro, data?.address);
+      this.validateAddressField(localidade, data?.city);
+      this.validateAddressField(bairro, data?.neighborhood);
+      this.validateAddressField(uf, data?.state);
+      Object.assign(validatedData, {
+        zipcode: cep,
+        address: logradouro ?? data.address,
+        city: localidade ?? data.city,
+        neighborhood: bairro ?? data.neighborhood,
+        state: uf ?? data.state,
+      });
+    }
+
+    if (data.clientId) {
+      const clientExists = await this.prisma.client.findUnique({
+        where: { id: data.clientId },
+      });
+
+      if (!clientExists) {
+        throw new NotFoundException('Client Not Found!');
+      }
+
+      Object.assign(validatedData, {
+        ...validatedData,
+        clientId: clientExists.id,
+      });
+    }
+
+    const editLessee = this.prisma.lessee.update({
+      where: { id },
+      data: validatedData,
+    });
+
+    return editLessee;
+  }
+
+  async deleteLessee(id: string): Promise<void> {
+    const haveALease = await this.prisma.lessee.findUnique({
+      where: { id },
+      include: { elease: true },
+    });
+
+    if (!haveALease) {
+      throw new BadRequestException('This lessee have an ongoing contract');
+    }
+
+    return;
+  }
+
+  private validateAddressField(apiValue?: string | null, bodyValue?: string) {
+    if (
+      bodyValue &&
+      apiValue &&
+      normalizeAddress(bodyValue) !== normalizeAddress(apiValue)
+    ) {
+      throw new BadRequestException(
+        `${bodyValue} dont match with this zipcode.`,
+      );
+    }
+  }
+
+  private async checkZipCode(zipcode: string): Promise<ZipcodeInfo> {
     const { data } = await firstValueFrom(
       this.httpService.get<ZipcodeInfo>(
         `${process.env.ZIPCODE_API_URL}${zipcode}/json/`,
@@ -118,7 +201,7 @@ export class LesseeService {
     );
 
     if (!data || data.erro) {
-      throw new BadRequestException('Invalid Zipcode');
+      throw new NotFoundException('Zipcode Not Found');
     }
 
     return {

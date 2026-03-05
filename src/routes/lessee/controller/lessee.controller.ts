@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   Post,
+  Put,
   Query,
   UseFilters,
 } from '@nestjs/common';
@@ -14,6 +16,7 @@ import { FilterLesseeDTO } from '../dto/filterLessee.dto';
 import { Client, Lessee } from 'generated/prisma/client';
 import { CreateLesseeDTO } from '../dto/createLessee.dto';
 import { PrismaExceptionValidationFilter } from 'src/global/error/prismacientvalidationerror.exception';
+import { EditLesseeDto } from '../dto/editLessee.dto';
 
 @Controller('/lessee')
 export class LesseeController {
@@ -42,5 +45,20 @@ export class LesseeController {
   @UseFilters(new PrismaExceptionValidationFilter())
   async createLessee(@Body() createLessee: CreateLesseeDTO): Promise<Lessee> {
     return await this.lesseeService.createLessee(createLessee);
+  }
+
+  @Put(':id')
+  @HttpCode(HttpStatus.OK)
+  async updateLessee(
+    @Param('id') id: string,
+    @Body() updateLessee: EditLesseeDto,
+  ): Promise<Lessee> {
+    return await this.lesseeService.updateLessee(id, updateLessee);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteLessee(@Param('id') id: string): Promise<void> {
+    return await this.lesseeService.deleteLessee(id);
   }
 }

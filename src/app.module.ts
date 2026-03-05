@@ -11,9 +11,16 @@ import { PrismaExceptionFilter } from './global/error/prismaclientknownerror.exc
 import { EquipmentModule } from './routes/equipment/equipment.module';
 import { ClientModule } from './routes/client/client.module';
 import { LesseeModule } from './routes/lessee/lessee.module';
+import { ELeaseModule } from './routes/elease/elease.module';
 
 @Module({
-  imports: [PrismaModule, EquipmentModule, ClientModule, LesseeModule],
+  imports: [
+    PrismaModule,
+    EquipmentModule,
+    ClientModule,
+    LesseeModule,
+    ELeaseModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,

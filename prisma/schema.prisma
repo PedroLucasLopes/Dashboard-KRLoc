@@ -21,7 +21,8 @@ model Equipment {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   suffix      Int             @unique @default(autoincrement())
-  eleases     ELease[]
+  eleaseId    String?
+  elease      ELease?         @relation(fields: [eleaseId], references: [id])
 }
 
 model Client {
@@ -42,27 +43,26 @@ model Lessee {
   zipcode      String
   city         String?
   country      String?
-  neighborhood String?
-  state        String?
   clientId     String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  eleases      ELease[]
+  neighborhood String?
+  state        String?
+  elease       ELease?
   client       Client   @relation(fields: [clientId], references: [id])
 }
 
 model ELease {
-  id          String      @id @default(uuid())
-  equipmentId String
-  lesseeId    String
-  startDate   DateTime
-  endDate     DateTime
-  finishDate  DateTime
-  status      LeaseStatus @default(PENDING)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  equipment   Equipment   @relation(fields: [equipmentId], references: [id])
-  lessee      Lessee      @relation(fields: [lesseeId], references: [id])
+  id         String      @id @default(uuid())
+  lesseeId   String      @unique
+  startDate  DateTime
+  endDate    DateTime
+  finishDate DateTime?
+  status     LeaseStatus @default(PENDING)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  lessee     Lessee      @relation(fields: [lesseeId], references: [id])
+  equipments Equipment[]
 }
 
 enum StatusEquipment {
@@ -71,6 +71,7 @@ enum StatusEquipment {
   MAINTENANCE
   RETIRED
   STOLEN
+  PENDING
 }
 
 enum LeaseStatus {
