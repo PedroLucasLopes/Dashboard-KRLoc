@@ -36,17 +36,19 @@ model Client {
 }
 
 model Lessee {
-  id        String   @id @default(uuid())
-  name      String
-  address   String
-  zipcode   String
-  city      String?
-  country   String?
-  clientId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  eleases   ELease[]
-  client    Client   @relation(fields: [clientId], references: [id])
+  id           String   @id @default(uuid())
+  name         String
+  address      String
+  zipcode      String
+  city         String?
+  country      String?
+  neighborhood String?
+  state        String?
+  clientId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  eleases      ELease[]
+  client       Client   @relation(fields: [clientId], references: [id])
 }
 
 model ELease {

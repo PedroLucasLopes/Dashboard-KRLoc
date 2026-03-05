@@ -69,8 +69,18 @@ export class ClientService {
     return client;
   }
 
-  // NECESSÁRIO COLOCAR A REGRA DE NEGOCIO DE VER SE O CLIENTE TEM ALGUM CONTRATO VINCULADO, CASO TENHA, NÃO DEVE PERMITIR A EXCLUSÃO DO CLIENTE
   async deleteClient(id: string): Promise<void> {
+    const client = await this.prisma.client.findUnique({
+      where: { id },
+      include: { lessees: true },
+    });
+
+    if (client && client.lessees.length > 0) {
+      throw new NotFoundException(
+        'This client has associated lessees and cannot be deleted',
+      );
+    }
+
     await this.prisma.client.delete({
       where: { id },
     });

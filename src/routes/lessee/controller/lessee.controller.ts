@@ -1,14 +1,19 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  Post,
   Query,
+  UseFilters,
 } from '@nestjs/common';
 import { LesseeService } from '../service/lessee.service';
 import { FilterLesseeDTO } from '../dto/filterLessee.dto';
 import { Client, Lessee } from 'generated/prisma/client';
+import { CreateLesseeDTO } from '../dto/createLessee.dto';
+import { PrismaExceptionValidationFilter } from 'src/global/error/prismacientvalidationerror.exception';
 
 @Controller('/lessee')
 export class LesseeController {
@@ -26,9 +31,16 @@ export class LesseeController {
     return await this.lesseeService.findById(id);
   }
 
-  @Get('/:clientId')
+  @Get('lesseesbyclient/:clientId')
   @HttpCode(HttpStatus.OK)
   async findByClient(@Param('clientId') clientId: string): Promise<Client> {
     return await this.lesseeService.findByClient(clientId);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @UseFilters(new PrismaExceptionValidationFilter())
+  async createLessee(@Body() createLessee: CreateLesseeDTO): Promise<Lessee> {
+    return await this.lesseeService.createLessee(createLessee);
   }
 }

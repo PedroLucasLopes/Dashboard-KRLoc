@@ -1,10 +1,11 @@
 import {
-  IsISO31661Alpha2,
   IsNotEmpty,
   IsOptional,
   IsPostalCode,
   IsString,
-  Min,
+  Length,
+  Matches,
+  MinLength,
 } from 'class-validator';
 
 export class CreateLesseeDTO {
@@ -21,7 +22,7 @@ export class CreateLesseeDTO {
   @IsPostalCode('BR', {
     message: 'Zipcode must be a valid Brazilian postal code',
   })
-  @Min(8, {
+  @MinLength(8, {
     message: 'Zipcode must be at least 8 characters long',
   })
   zipcode: string;
@@ -32,8 +33,19 @@ export class CreateLesseeDTO {
 
   @IsString()
   @IsOptional()
-  @IsISO31661Alpha2()
   country?: string;
+
+  @IsString()
+  @IsOptional()
+  neighborhood?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(2, 2)
+  @Matches(/^[A-Z]{2}$/, {
+    message: 'The state has to be no longer 2 characters',
+  })
+  state?: string;
 
   @IsString()
   @IsNotEmpty()
