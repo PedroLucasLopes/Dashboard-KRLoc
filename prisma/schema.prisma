@@ -23,17 +23,28 @@ model Equipment {
   suffix      Int             @unique @default(autoincrement())
   eleaseId    String?
   elease      ELease?         @relation(fields: [eleaseId], references: [id])
+  leaseItems  LeaseItem[]
+
+  @@index([status])
+  @@index([eleaseId])
 }
 
 model Client {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?  @unique
-  phone     String?
-  tax_id    String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  lessees   Lessee[]
+  id           String   @id @default(uuid())
+  name         String
+  email        String?  @unique
+  phone        String?
+  tax_id       String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  address      String
+  city         String
+  country      String?
+  neighborhood String?
+  number       Int?
+  state        String?
+  zipcode      String
+  lessees      Lessee[]
 }
 
 model Lessee {
@@ -41,28 +52,68 @@ model Lessee {
   name         String
   address      String
   zipcode      String
-  city         String?
+  city         String
   country      String?
   clientId     String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   neighborhood String?
   state        String?
-  elease       ELease?
+  number       Int?
+  eleases      ELease[]
   client       Client   @relation(fields: [clientId], references: [id])
 }
 
 model ELease {
   id         String      @id @default(uuid())
-  lesseeId   String      @unique
+  lesseeId   String
   startDate  DateTime
   endDate    DateTime
   finishDate DateTime?
   status     LeaseStatus @default(PENDING)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
+  auditLogs  AuditLog[]
   lessee     Lessee      @relation(fields: [lesseeId], references: [id])
   equipments Equipment[]
+  leaseItems LeaseItem[]
+}
+
+model LeaseItem {
+  id              String           @id @default(uuid())
+  contractId      String
+  equipmentId     String
+  equipmentName   String
+  equipmentCode   String
+  equipmentSuffix Int
+  p_diary         Float
+  p_weekly        Float?
+  p_biweekly      Float?
+  p_monthly       Float?
+  p_indemnity     Float
+  startDate       DateTime
+  finishDate      DateTime?
+  startStatus     StatusEquipment
+  finalStatus     StatusEquipment?
+  createdAt       DateTime         @default(now())
+  contract        ELease           @relation(fields: [contractId], references: [id])
+  equipment       Equipment        @relation(fields: [equipmentId], references: [id])
+
+  @@unique([contractId, equipmentId])
+  @@index([contractId])
+  @@index([equipmentId])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  contractId  String
+  action      AuditAction
+  description String?
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+  contract    ELease      @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
 }
 
 enum StatusEquipment {
@@ -79,4 +130,14 @@ enum LeaseStatus {
   COMPLETED
   CANCELLED
   PENDING
+}
+
+enum AuditAction {
+  CONTRACT_CREATED
+  CONTRACT_STARTED
+  CONTRACT_CANCELLED
+  CONTRACT_COMPLETED
+  EQUIPMENT_ADDED
+  EQUIPMENT_REMOVED
+  EQUIPMENT_STATUS_CHANGED
 }

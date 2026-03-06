@@ -41,6 +41,18 @@ export class ELeaseController {
     return await this.eleaseService.createELease(createEleaseDto);
   }
 
+  @Post('start/:id')
+  @HttpCode(HttpStatus.OK)
+  async startContract(@Param('id') id: string): Promise<ELease> {
+    return await this.eleaseService.startContract(id);
+  }
+
+  @Post('cancel/:id')
+  @HttpCode(HttpStatus.OK)
+  async cancelContract(@Param('id') id: string): Promise<ELease> {
+    return await this.eleaseService.cancelContract(id);
+  }
+
   //   @Put(':id')
   //   @HttpCode(HttpStatus.OK)
   //   async updateELease(

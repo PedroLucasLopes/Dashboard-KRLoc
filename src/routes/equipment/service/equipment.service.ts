@@ -137,6 +137,8 @@ export class EquipmentService {
   async editEquipment(id: string, data: EditEquipmentDto): Promise<Equipment> {
     const updateData: EditEquipmentDto = { ...data };
 
+    await this.equipmentIsRented(id);
+
     if (data.code) {
       updateData.code = validateCode(data.code);
     }
@@ -148,9 +150,30 @@ export class EquipmentService {
   }
 
   async deleteEquipment(id: string): Promise<void> {
+    await this.equipmentIsRented(id);
     await this.prisma.equipment.update({
       where: { id },
       data: { status: StatusEquipment.RETIRED },
     });
+  }
+
+  private async equipmentIsRented(id: string): Promise<void> {
+    const findEquipment = await this.prisma.equipment.findUnique({
+      where: {
+        id,
+        status: {
+          in: [
+            StatusEquipment.AVAILABLE,
+            StatusEquipment.MAINTENANCE,
+            StatusEquipment.RETIRED,
+            StatusEquipment.STOLEN,
+          ],
+        },
+      },
+    });
+
+    if (!findEquipment) {
+      throw new NotFoundException('Equipment not found');
+    }
   }
 }

@@ -1,4 +1,4 @@
-export const normalizeAddress = (value: string): string => {
+export const compareAddress = (value: string): string => {
   return value
     .toLowerCase()
     .normalize('NFD')

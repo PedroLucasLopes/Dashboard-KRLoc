@@ -8,17 +8,17 @@ import { FilterLesseeDTO } from '../dto/filterLessee.dto';
 import { Client, Lessee } from 'generated/prisma/client';
 import { PaginationConfig } from 'src/global/utils/pagination.utils';
 import { CreateLesseeDTO } from '../dto/createLessee.dto';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import { ZipcodeInfo } from '../types/zipcodevalidator';
-import { normalizeAddress } from '../utils/normalizeAdress.utils';
 import { EditLesseeDto } from '../dto/editLessee.dto';
+import { ZipcodeService } from 'src/global/address/zipcode.service';
+import { AddressValidator } from 'src/global/address/address.validator';
+import { normalizeApiAddress } from 'src/global/utils/normalizeApiAddress.utils';
 
 @Injectable()
 export class LesseeService {
   constructor(
     private prisma: PrismaService,
-    private httpService: HttpService,
+    private zipcodeService: ZipcodeService,
+    private addressValidator: AddressValidator,
   ) {}
 
   async findAll(filter?: FilterLesseeDTO): Promise<Lessee[]> {
@@ -39,6 +39,7 @@ export class LesseeService {
           city: { contains: filter.city, mode: 'insensitive' },
         }),
       },
+      include: { eleases: true },
       skip: page,
       take: limit,
       orderBy: { name: filter?.order },
@@ -69,19 +70,18 @@ export class LesseeService {
       include: { lessees: true },
     });
 
-    if (client?.lessees.length === 0) {
-      throw new NotFoundException(`${client.name} does not have any lessees`);
-    }
-
     if (!client) {
       throw new NotFoundException('This client does not exist');
+    }
+
+    if (client?.lessees.length === 0) {
+      throw new NotFoundException(`${client.name} does not have any lessees`);
     }
 
     return client;
   }
 
   async createLessee(data: CreateLesseeDTO): Promise<Lessee> {
-    const zipCode = await this.checkZipCode(data.zipcode);
     const clientIdExists = await this.prisma.client.findUnique({
       where: { id: data.clientId },
     });
@@ -90,10 +90,9 @@ export class LesseeService {
       throw new BadRequestException('This client does not exist!');
     }
 
-    this.validateAddressField(zipCode.logradouro, data.address);
-    this.validateAddressField(zipCode.localidade, data?.city);
-    this.validateAddressField(zipCode.bairro, data?.neighborhood);
-    this.validateAddressField(zipCode.uf, data?.state);
+    const zipCode = await this.zipcodeService.getZipcode(data.zipcode);
+
+    this.addressValidator.validate(normalizeApiAddress(zipCode), data);
 
     const createLessee = await this.prisma.lessee.create({
       data: {
@@ -119,29 +118,29 @@ export class LesseeService {
       throw new BadRequestException('This lessee does not exist!');
     }
 
-    this.validateAddressField(lesseeExists?.address, data?.address);
-    this.validateAddressField(lesseeExists?.city, data?.city);
-    this.validateAddressField(lesseeExists?.neighborhood, data?.neighborhood);
-    this.validateAddressField(lesseeExists?.state, data?.state);
+    this.addressValidator.validate(
+      {
+        address: lesseeExists.address,
+        city: lesseeExists.city,
+        state: lesseeExists?.state,
+        neighborhood: lesseeExists?.neighborhood,
+      },
+      data,
+    );
 
     const validatedData: EditLesseeDto = { ...data };
 
     const bodyZipCode = data.zipcode && data.zipcode.replace(/-/g, '');
 
     if (data.zipcode && bodyZipCode !== lesseeExists.zipcode) {
-      const { cep, logradouro, localidade, bairro, uf } =
-        await this.checkZipCode(data.zipcode);
-      this.validateAddressField(cep, data?.state);
-      this.validateAddressField(logradouro, data?.address);
-      this.validateAddressField(localidade, data?.city);
-      this.validateAddressField(bairro, data?.neighborhood);
-      this.validateAddressField(uf, data?.state);
+      const zipCode = await this.zipcodeService.getZipcode(data.zipcode);
+      this.addressValidator.validate(normalizeApiAddress(zipCode), data);
       Object.assign(validatedData, {
-        zipcode: cep,
-        address: logradouro ?? data.address,
-        city: localidade ?? data.city,
-        neighborhood: bairro ?? data.neighborhood,
-        state: uf ?? data.state,
+        zipcode: zipCode.cep,
+        address: zipCode.logradouro ?? data.address,
+        city: zipCode.localidade ?? data.city,
+        neighborhood: zipCode.bairro ?? data.neighborhood,
+        state: zipCode.uf ?? data.state,
       });
     }
 
@@ -152,6 +151,10 @@ export class LesseeService {
 
       if (!clientExists) {
         throw new NotFoundException('Client Not Found!');
+      }
+
+      if (clientExists && id !== clientExists.id) {
+        throw new BadRequestException('Lessee cant change of owner');
       }
 
       Object.assign(validatedData, {
@@ -169,44 +172,15 @@ export class LesseeService {
   }
 
   async deleteLessee(id: string): Promise<void> {
-    const haveALease = await this.prisma.lessee.findUnique({
+    const haveAELease = await this.prisma.lessee.findUnique({
       where: { id },
-      include: { elease: true },
+      include: { eleases: true },
     });
 
-    if (!haveALease) {
+    if (haveAELease?.eleases !== null) {
       throw new BadRequestException('This lessee have an ongoing contract');
     }
 
     return;
-  }
-
-  private validateAddressField(apiValue?: string | null, bodyValue?: string) {
-    if (
-      bodyValue &&
-      apiValue &&
-      normalizeAddress(bodyValue) !== normalizeAddress(apiValue)
-    ) {
-      throw new BadRequestException(
-        `${bodyValue} dont match with this zipcode.`,
-      );
-    }
-  }
-
-  private async checkZipCode(zipcode: string): Promise<ZipcodeInfo> {
-    const { data } = await firstValueFrom(
-      this.httpService.get<ZipcodeInfo>(
-        `${process.env.ZIPCODE_API_URL}${zipcode}/json/`,
-      ),
-    );
-
-    if (!data || data.erro) {
-      throw new NotFoundException('Zipcode Not Found');
-    }
-
-    return {
-      ...data,
-      cep: data.cep.replace(/-/g, ''),
-    };
   }
 }

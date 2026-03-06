@@ -34,8 +34,8 @@ export class CreateELeaseDto {
   finishDate?: Date;
 
   @IsEnum(LeaseStatus)
-  @IsNotEmpty()
-  status: LeaseStatus;
+  @IsOptional()
+  status?: LeaseStatus;
 
   @IsArray()
   @IsString({ each: true })

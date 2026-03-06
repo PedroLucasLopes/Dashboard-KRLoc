@@ -12,9 +12,11 @@ import { EquipmentModule } from './routes/equipment/equipment.module';
 import { ClientModule } from './routes/client/client.module';
 import { LesseeModule } from './routes/lessee/lessee.module';
 import { ELeaseModule } from './routes/elease/elease.module';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
+    HttpModule,
     PrismaModule,
     EquipmentModule,
     ClientModule,

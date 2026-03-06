@@ -5,10 +5,17 @@ import { PaginationConfig } from 'src/global/utils/pagination.utils';
 import { FilterClientDTO } from '../dto/filterclient.dto';
 import { CreateClientDto } from '../dto/createClient.dto';
 import { EditClientDto } from '../dto/editClient.dto';
+import { ZipcodeService } from 'src/global/address/zipcode.service';
+import { AddressValidator } from 'src/global/address/address.validator';
+import { normalizeApiAddress } from 'src/global/utils/normalizeApiAddress.utils';
 
 @Injectable()
 export class ClientService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private zipcodeService: ZipcodeService,
+    private addressValidator: AddressValidator,
+  ) {}
 
   async findAll(filter: FilterClientDTO): Promise<Client[]> {
     const { page, limit } = PaginationConfig(filter);
@@ -52,18 +59,60 @@ export class ClientService {
   }
 
   async createClient(data: CreateClientDto): Promise<Client> {
+    const zipCode = await this.zipcodeService.getZipcode(data.zipcode);
+
+    this.addressValidator.validate(normalizeApiAddress(zipCode), data);
+
     const client = await this.prisma.client.create({
-      data,
+      data: {
+        ...data,
+        zipcode: zipCode.cep,
+        address: zipCode.logradouro ?? data.address,
+        city: zipCode.localidade ?? data.city,
+        neighborhood: zipCode.bairro ?? data.neighborhood,
+        state: zipCode.uf ?? data.state,
+      },
     });
 
     return client;
   }
 
   async updateClient(id: string, data: EditClientDto): Promise<Client> {
-    const updateData: EditClientDto = { ...data };
+    const clientExists = await this.prisma.client.findUnique({ where: { id } });
+
+    if (!clientExists) {
+      throw new NotFoundException('Client not found');
+    }
+
+    this.addressValidator.validate(
+      {
+        address: clientExists.address,
+        city: clientExists.city,
+        state: clientExists?.state,
+        neighborhood: clientExists?.neighborhood,
+      },
+      data,
+    );
+
+    const validatedData: EditClientDto = { ...data };
+
+    const bodyZipCode = data.zipcode && data.zipcode.replace(/-/g, '');
+
+    if (data.zipcode && bodyZipCode !== clientExists.zipcode) {
+      const zipCode = await this.zipcodeService.getZipcode(data.zipcode);
+      this.addressValidator.validate(normalizeApiAddress(zipCode), data);
+      Object.assign(validatedData, {
+        zipcode: zipCode.cep,
+        address: zipCode.logradouro ?? data.address,
+        city: zipCode.localidade ?? data.city,
+        neighborhood: zipCode.bairro ?? data.neighborhood,
+        state: zipCode.uf ?? data.state,
+      });
+    }
+
     const client = await this.prisma.client.update({
       where: { id },
-      data: updateData,
+      data: validatedData,
     });
 
     return client;
