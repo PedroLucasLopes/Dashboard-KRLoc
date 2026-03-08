@@ -15,6 +15,7 @@ import { ELeaseService } from '../service/elease.service';
 import { CreateELeaseDto } from '../dto/createELease.dto';
 // import { EditELeaseDto } from '../dto/editELease.dto';
 import { FilterELeaseDto } from '../dto/filterELease.dto';
+import { AddEquipmentsDto } from '../dto/addEquipments.dto';
 
 @Controller('/elease')
 export class ELeaseController {
@@ -51,6 +52,15 @@ export class ELeaseController {
   @HttpCode(HttpStatus.OK)
   async cancelContract(@Param('id') id: string): Promise<ELease> {
     return await this.eleaseService.cancelContract(id);
+  }
+
+  @Post('add/:id')
+  @HttpCode(HttpStatus.OK)
+  async addEquipmentsToContract(
+    @Param('id') id: string,
+    @Body() equipmentsId: AddEquipmentsDto,
+  ): Promise<ELease> {
+    return await this.eleaseService.addEquipmentsToELease(id, equipmentsId);
   }
 
   //   @Put(':id')
