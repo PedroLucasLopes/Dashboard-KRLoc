@@ -13,6 +13,7 @@ import { ClientModule } from './routes/client/client.module';
 import { LesseeModule } from './routes/lessee/lessee.module';
 import { ELeaseModule } from './routes/elease/elease.module';
 import { HttpModule } from '@nestjs/axios';
+import { DocumentModule } from './routes/document/document.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { HttpModule } from '@nestjs/axios';
     ClientModule,
     LesseeModule,
     ELeaseModule,
+    DocumentModule,
   ],
   controllers: [AppController],
   providers: [

@@ -80,7 +80,7 @@ export class ELeaseService {
     });
 
     if (!foundELease) {
-      throw new NotFoundException('This equipment does not exist');
+      throw new NotFoundException('This contract does not exist');
     }
 
     return foundELease;

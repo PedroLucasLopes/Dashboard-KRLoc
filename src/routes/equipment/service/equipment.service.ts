@@ -6,7 +6,7 @@ import { CreateEquipmentDto } from '../dto/createEquipment.dto';
 import { EditEquipmentDto } from '../dto/editEquipment.dto';
 import { PaginationConfig } from 'src/global/utils/pagination.utils';
 import { FilterEquipmentDTO } from '../dto/filterequipment.dto';
-import * as csv from 'csv-parser';
+import csv from 'csv-parser';
 import { Readable } from 'stream';
 import { CsvImport } from 'src/global/types/csvImport';
 import { parseStatus } from '../utils/parseStatus.utils';
