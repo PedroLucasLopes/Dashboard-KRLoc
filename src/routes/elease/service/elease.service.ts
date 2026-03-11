@@ -19,6 +19,7 @@ import { CreateELeaseDto } from '../dto/createELease.dto';
 import { CustomEquipmentInContract } from '../dto/customEquipmentInContract.dto';
 import { Equipment } from 'generated/prisma/browser';
 import { EquipmentsEditStatus } from '../dto/equipmentsEditStatus.dto';
+import { ReplaceEquipmentDto } from '../dto/replaceEquipment.dto';
 
 @Injectable()
 export class ELeaseService {
@@ -675,150 +676,204 @@ export class ELeaseService {
   }
 
   async replaceEquipment(
-    id: string,
-    equipmentsId: CustomEquipmentInContract,
+    contractId: string,
+    body: ReplaceEquipmentDto,
   ): Promise<ELease> {
-    const { equipments } = equipmentsId;
-    const findContract = await this.prisma.eLease.findFirst({
-      where: { id, status: LeaseStatus.ACTIVE },
-      include: {
-        leaseItems: {
-          select: { equipmentId: true, equipmentCode: true },
-          where: {
-            finalStatus: StatusEquipment.MAINTENANCE,
-          },
-        },
-        lessee: {
-          select: {
-            name: true,
-          },
+    const { replacements } = body;
+
+    // 1. Busca o contrato ativo
+    const contract = await this.prisma.eLease.findFirst({
+      where: { id: contractId, status: LeaseStatus.ACTIVE },
+      include: { lessee: { select: { name: true } } },
+    });
+
+    if (!contract) {
+      throw new NotFoundException('Active contract not found');
+    }
+
+    const oldIds = replacements.map((r) => r.oldEquipmentId);
+    const newIds = replacements.map((r) => r.newEquipmentId);
+
+    // 2. Garante que não há duplicatas no array enviado
+    const uniqueOldIds = new Set(oldIds);
+    const uniqueNewIds = new Set(newIds);
+
+    if (
+      uniqueOldIds.size !== oldIds.length ||
+      uniqueNewIds.size !== newIds.length
+    ) {
+      throw new BadRequestException('Duplicate equipment ids in replacements');
+    }
+
+    // 3. Busca todos os leaseItems relevantes de uma vez
+    const oldLeaseItems = await this.prisma.leaseItem.findMany({
+      where: {
+        contractId,
+        equipmentId: { in: oldIds },
+        finalStatus: {
+          in: [StatusEquipment.MAINTENANCE, StatusEquipment.STOLEN],
         },
       },
     });
 
-    if (!findContract) {
-      throw new NotFoundException('Contract not found');
-    }
-
-    if (!findContract.leaseItems.length) {
+    if (oldLeaseItems.length !== replacements.length) {
       throw new BadRequestException(
-        'No equipments in maintenance to substitute',
+        'One or more equipments were not found as MAINTENANCE or STOLEN items in this contract',
       );
     }
 
-    if (equipments.length > findContract.leaseItems.length) {
+    // 4. Busca todos os equipamentos antigos e novos de uma vez
+    const [oldEquipments, newEquipments] = await Promise.all([
+      this.prisma.equipment.findMany({
+        where: {
+          id: { in: oldIds },
+          status: { in: [StatusEquipment.MAINTENANCE, StatusEquipment.STOLEN] },
+        },
+      }),
+      this.prisma.equipment.findMany({
+        where: { id: { in: newIds }, status: StatusEquipment.AVAILABLE },
+      }),
+    ]);
+
+    if (oldEquipments.length !== replacements.length) {
       throw new BadRequestException(
-        'You are trying to substitute more equipments than necessary',
+        'One or more old equipments are not in MAINTENANCE or STOLEN status',
       );
     }
 
-    const findAvailableEquipments = await this.prisma.equipment.findMany({
-      where: { id: { in: equipments }, status: StatusEquipment.AVAILABLE },
-    });
-
-    if (findAvailableEquipments.length < equipments.length) {
-      throw new BadRequestException('Some equipments are not available');
+    if (newEquipments.length !== replacements.length) {
+      throw new BadRequestException(
+        'One or more new equipments are not available',
+      );
     }
 
-    const maintenanceItems = [...findContract.leaseItems];
+    // 5. Monta mapas para lookup O(1) e valida compatibilidade par a par
+    const oldEquipmentMap = new Map(oldEquipments.map((e) => [e.id, e]));
+    const newEquipmentMap = new Map(newEquipments.map((e) => [e.id, e]));
+    const oldLeaseItemMap = new Map(
+      oldLeaseItems.map((i) => [i.equipmentId, i]),
+    );
 
-    const replacements: { old: string[]; current: Equipment[] } = {
-      old: [],
-      current: [],
-    };
+    for (const { oldEquipmentId, newEquipmentId } of replacements) {
+      const oldEq = oldEquipmentMap.get(oldEquipmentId);
+      const newEq = newEquipmentMap.get(newEquipmentId);
 
-    for (const newEquipment of findAvailableEquipments) {
-      const matchIndex = maintenanceItems.findIndex(
-        (item) => item.equipmentCode === newEquipment.code,
-      );
-
-      if (matchIndex === -1) {
+      if (!oldEq || !newEq) {
         throw new BadRequestException(
-          `Equipment ${newEquipment.code} is not compatible with maintenance items`,
+          `Could not resolve equipment pair: ${oldEquipmentId} → ${newEquipmentId}`,
         );
       }
 
-      replacements.old.push(maintenanceItems[matchIndex].equipmentId);
-      replacements.current.push(newEquipment);
+      if (newEq.code !== oldEq.code) {
+        throw new BadRequestException(
+          `Equipment type mismatch: cannot replace ${oldEq.code}-${oldEq.suffix} with ${newEq.code}-${newEq.suffix}`,
+        );
+      }
+
+      if (newEq.suffix === oldEq.suffix) {
+        throw new BadRequestException(
+          `New equipment ${newEq.code}-${newEq.suffix} must have a different suffix from the old one`,
+        );
+      }
     }
 
-    const { old, current } = replacements;
+    const maintenanceIds = oldIds.filter(
+      (id) => oldEquipmentMap.get(id)!.status === StatusEquipment.MAINTENANCE,
+    );
 
-    const replaceEquipments = await this.prisma.$transaction(
+    // 6. Transação: executa todas as trocas atomicamente
+    const updatedLease = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const [, , updateLease, ,] = await Promise.all([
-          tx.eLease.update({
-            where: { id, status: LeaseStatus.ACTIVE },
-            data: {
-              equipments: {
-                disconnect: old.map((equipmentId) => ({
-                  id: equipmentId,
-                })),
-              },
-            },
-          }),
-
+        await Promise.all([
           tx.equipment.updateMany({
-            where: {
-              id: { in: current.map((e) => e.id) },
-              status: StatusEquipment.AVAILABLE,
-            },
+            where: { id: { in: newIds }, status: StatusEquipment.AVAILABLE },
             data: {
               status: StatusEquipment.REPLACE,
             },
           }),
 
+          // Desconecta todos os antigos e conecta todos os novos
           tx.eLease.update({
-            where: { id, status: LeaseStatus.ACTIVE },
+            where: { id: contractId, status: LeaseStatus.ACTIVE },
             data: {
               equipments: {
-                connect: current.map(({ id }) => ({
-                  id,
-                })),
+                disconnect: maintenanceIds.map((id) => ({ id })),
+                connect: newIds.map((id) => ({ id })),
               },
             },
+          }),
+
+          // Cria leaseItems dos novos herdando startDate do leaseItem antigo correspondente
+          tx.leaseItem.createMany({
+            data: replacements.map(({ oldEquipmentId, newEquipmentId }) => {
+              const newEq = newEquipmentMap.get(newEquipmentId)!;
+              const billingStartDate =
+                oldLeaseItemMap.get(oldEquipmentId)!.startDate;
+
+              return {
+                contractId,
+                equipmentId: newEq.id,
+                equipmentName: newEq.name,
+                equipmentCode: newEq.code,
+                equipmentSuffix: newEq.suffix,
+                p_diary: newEq.p_diary,
+                p_weekly: newEq.p_weekly,
+                p_biweekly: newEq.p_biweekly,
+                p_monthly: newEq.p_monthly,
+                p_indemnity: newEq.p_indemnity,
+                startStatus: StatusEquipment.REPLACE,
+                startDate: billingStartDate,
+              };
+            }),
           }),
 
           tx.auditLog.create({
             data: {
-              contractId: findContract.id,
+              contractId,
               action: AuditAction.EQUIPMENT_REPLACE,
-              description: `Contract for ${findContract.lessee.name} replaced equipments`,
+              description: `Contract for ${contract.lessee.name} replaced ${replacements.length} equipment(s)`,
               metadata: {
-                equipments: current,
-                startDate: findContract.startDate,
-                status: LeaseStatus.ACTIVE,
+                replacements: replacements.map(
+                  ({ oldEquipmentId, newEquipmentId }) => {
+                    const oldEq = oldEquipmentMap.get(oldEquipmentId)!;
+                    const newEq = newEquipmentMap.get(newEquipmentId)!;
+                    const isStolen = oldEq.status === StatusEquipment.STOLEN;
+                    return {
+                      old: {
+                        id: oldEq.id,
+                        code: oldEq.code,
+                        suffix: oldEq.suffix,
+                        status: oldEq.status,
+                        keepELeaseId: isStolen,
+                      },
+                      new: {
+                        id: newEq.id,
+                        code: newEq.code,
+                        suffix: newEq.suffix,
+                        status: StatusEquipment.REPLACE,
+                      },
+                      billingStartDate:
+                        oldLeaseItemMap.get(oldEquipmentId)!.startDate,
+                    };
+                  },
+                ),
               },
             },
           }),
-
-          tx.leaseItem.createMany({
-            data: current.map((equipment) => ({
-              contractId: findContract.id,
-              equipmentId: equipment.id,
-              equipmentName: equipment.name,
-              equipmentCode: equipment.code,
-              equipmentSuffix: equipment.suffix,
-              p_diary: equipment.p_diary,
-              p_weekly: equipment.p_weekly,
-              p_biweekly: equipment.p_biweekly,
-              p_monthly: equipment.p_monthly,
-              p_indemnity: equipment.p_indemnity,
-              startStatus: StatusEquipment.REPLACE,
-              startDate: new Date(),
-            })),
-          }),
         ]);
 
-        return updateLease;
+        return tx.eLease.findFirst({
+          where: { id: contractId },
+          include: { leaseItems: true, lessee: true },
+        });
       },
     );
 
-    if (!replaceEquipments) {
-      throw new InternalServerErrorException('something went wrong!');
+    if (!updatedLease) {
+      throw new InternalServerErrorException('Something went wrong');
     }
 
-    return replaceEquipments;
+    return updatedLease;
   }
 
   async closeContract(id: string): Promise<ELease> {

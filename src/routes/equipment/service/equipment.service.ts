@@ -162,18 +162,13 @@ export class EquipmentService {
       where: {
         id,
         status: {
-          in: [
-            StatusEquipment.AVAILABLE,
-            StatusEquipment.MAINTENANCE,
-            StatusEquipment.RETIRED,
-            StatusEquipment.STOLEN,
-          ],
+          not: StatusEquipment.LEASED,
         },
       },
     });
 
     if (!findEquipment) {
-      throw new NotFoundException('Equipment not found');
+      throw new NotFoundException('Equipment not found or is rented');
     }
   }
 }

@@ -17,6 +17,7 @@ import { CreateELeaseDto } from '../dto/createELease.dto';
 import { FilterELeaseDto } from '../dto/filterELease.dto';
 import { CustomEquipmentInContract } from '../dto/customEquipmentInContract.dto';
 import { EquipmentsEditStatus } from '../dto/equipmentsEditStatus.dto';
+import { ReplaceEquipmentDto } from '../dto/replaceEquipment.dto';
 
 @Controller('/elease')
 export class ELeaseController {
@@ -92,7 +93,7 @@ export class ELeaseController {
   @HttpCode(HttpStatus.OK)
   async replaceEquipment(
     @Param('id') id: string,
-    @Body() equipmentsId: CustomEquipmentInContract,
+    @Body() equipmentsId: ReplaceEquipmentDto,
   ): Promise<ELease> {
     return await this.eleaseService.replaceEquipment(id, equipmentsId);
   }
