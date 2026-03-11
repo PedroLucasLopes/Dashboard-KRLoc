@@ -39,7 +39,7 @@ export class LesseeService {
           city: { contains: filter.city, mode: 'insensitive' },
         }),
       },
-      include: { eleases: true },
+      include: { eleases: true, client: true },
       skip: page,
       take: limit,
       orderBy: { name: filter?.order },
@@ -55,6 +55,7 @@ export class LesseeService {
   async findById(id: string): Promise<Lessee> {
     const lessee = await this.prisma.lessee.findUnique({
       where: { id },
+      include: { eleases: true, client: true },
     });
 
     if (!lessee) {

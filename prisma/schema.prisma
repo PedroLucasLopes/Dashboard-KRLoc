@@ -65,18 +65,19 @@ model Lessee {
 }
 
 model ELease {
-  id         String      @id @default(uuid())
-  lesseeId   String
-  startDate  DateTime
-  endDate    DateTime
-  finishDate DateTime?
-  status     LeaseStatus @default(PENDING)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  auditLogs  AuditLog[]
-  lessee     Lessee      @relation(fields: [lesseeId], references: [id])
-  equipments Equipment[]
-  leaseItems LeaseItem[]
+  id                 String      @id @default(uuid())
+  lesseeId           String
+  startDate          DateTime
+  endDate            DateTime
+  finishDate         DateTime?
+  status             LeaseStatus @default(PENDING)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  contract_generated DateTime?
+  auditLogs          AuditLog[]
+  lessee             Lessee      @relation(fields: [lesseeId], references: [id])
+  equipments         Equipment[]
+  leaseItems         LeaseItem[]
 }
 
 model LeaseItem {
@@ -123,6 +124,7 @@ enum StatusEquipment {
   RETIRED
   STOLEN
   PENDING
+  REPLACE
 }
 
 enum LeaseStatus {
@@ -140,4 +142,5 @@ enum AuditAction {
   EQUIPMENT_ADDED
   EQUIPMENT_REMOVED
   EQUIPMENT_STATUS_CHANGED
+  EQUIPMENT_REPLACE
 }

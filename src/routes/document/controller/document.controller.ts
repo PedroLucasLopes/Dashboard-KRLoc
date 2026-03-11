@@ -9,13 +9,22 @@ import {
 import { DocumentService } from '../service/document.service';
 import { Response } from 'express';
 
-@Controller('document')
+@Controller('generate')
 export class DocumentController {
   constructor(private readonly documentService: DocumentService) {}
 
-  @Get('generate/:id')
+  @Get('contract/:id')
   @HttpCode(HttpStatus.OK)
   async generateContract(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    return await this.documentService.generate(id, res);
+  }
+
+  @Get('finantial/:id')
+  @HttpCode(HttpStatus.OK)
+  async generateFinantialClose(
     @Param('id') id: string,
     @Res() res: Response,
   ): Promise<void> {

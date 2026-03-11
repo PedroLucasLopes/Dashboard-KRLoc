@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsPhoneNumber,
@@ -44,6 +45,10 @@ export class CreateClientDto {
   @IsString()
   @IsNotEmpty()
   address: string;
+
+  @IsInt()
+  @IsOptional()
+  number: number;
 
   @IsString()
   @IsNotEmpty()

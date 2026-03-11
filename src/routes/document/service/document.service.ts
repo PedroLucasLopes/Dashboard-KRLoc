@@ -28,20 +28,43 @@ import { LeaseItem, LeaseStatus } from 'generated/prisma/client';
 import { ELeaseService } from 'src/routes/elease/service/elease.service';
 import contractModel from '../utils/contract.json';
 import { ContractEquipment } from '../types/contractEquipment';
+import { PrismaService } from 'src/global/prisma/prisma.service';
 
 @Injectable()
 export class DocumentService {
-  constructor(private eLeaseService: ELeaseService) {}
+  constructor(
+    private eLeaseService: ELeaseService,
+    private prisma: PrismaService,
+  ) {}
 
-  public async generate(id: string, res: Response) {
+  public async generate(id: string, res: Response): Promise<void> {
     const contract = (await this.eLeaseService.findById(id)) as ELeaseById;
+    let fileName = '';
+    let buffer = [] as unknown as Buffer<ArrayBufferLike>;
 
-    if (contract.status !== LeaseStatus.PENDING) {
-      throw new BadRequestException('This contract is not Pending');
+    switch (contract.status) {
+      case LeaseStatus.PENDING:
+        buffer = await this.generateContract(contract);
+        fileName = `Contrato ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
+
+        await this.prisma.eLease.update({
+          where: { id: contract.id },
+          data: {
+            contract_generated: new Date(),
+          },
+        });
+        break;
+
+      case LeaseStatus.COMPLETED:
+        buffer = await this.generateContractClosure(contract);
+        fileName = `Fechamento ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
+        break;
+
+      default:
+        throw new BadRequestException(
+          'Contract must be PENDING or COMPLETED to generate a document',
+        );
     }
-
-    const buffer = await this.generateContract(contract);
-    const fileName = `Contrato ${contract.lessee.name} ${contract.lessee.client.name}.docx`;
 
     res.set({
       'Content-Type':
@@ -470,6 +493,13 @@ export class DocumentService {
     });
 
     const buffer = await Packer.toBuffer(contract);
+    return buffer;
+  }
+
+  private async generateContractClosure(data: ELeaseById): Promise<Buffer> {
+    console.log(data);
+    const finantialClosure = new Document({ sections: [] });
+    const buffer = await Packer.toBuffer(finantialClosure);
     return buffer;
   }
 }

@@ -1,6 +1,7 @@
 import { ELease, LeaseItem, LeaseStatus } from 'generated/prisma/client';
 
 export class ELeaseById implements ELease {
+  contract_generated: Date | null;
   id: string;
   startDate: Date;
   endDate: Date;

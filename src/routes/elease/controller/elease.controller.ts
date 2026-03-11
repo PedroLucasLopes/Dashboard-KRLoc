@@ -10,12 +10,13 @@ import {
   Query,
   UseFilters,
 } from '@nestjs/common';
-import { ELease } from 'generated/prisma/client';
+import { ELease, Equipment } from 'generated/prisma/client';
 import { PrismaExceptionValidationFilter } from 'src/global/error/prismacientvalidationerror.exception';
 import { ELeaseService } from '../service/elease.service';
 import { CreateELeaseDto } from '../dto/createELease.dto';
 import { FilterELeaseDto } from '../dto/filterELease.dto';
-import { CustomEquipmentInContract } from '../dto/customEquipmentInContract';
+import { CustomEquipmentInContract } from '../dto/customEquipmentInContract.dto';
+import { EquipmentsEditStatus } from '../dto/equipmentsEditStatus.dto';
 
 @Controller('/elease')
 export class ELeaseController {
@@ -70,5 +71,29 @@ export class ELeaseController {
     @Body() equipmentsId: CustomEquipmentInContract,
   ): Promise<ELease> {
     return await this.eleaseService.removeEquipmentsToELease(id, equipmentsId);
+  }
+
+  @Put('equipmentstatus/:id')
+  @HttpCode(HttpStatus.OK)
+  setUpdateStatusEquipment(
+    @Param('id') id: string,
+    @Body() equipmentsId: EquipmentsEditStatus,
+  ): Promise<Equipment[]> {
+    return this.eleaseService.setUpdateStatusEquipment(id, equipmentsId);
+  }
+
+  @Post('close/:id')
+  @HttpCode(HttpStatus.OK)
+  async closeContract(@Param('id') id: string): Promise<ELease> {
+    return this.eleaseService.closeContract(id);
+  }
+
+  @Put('replace/:id')
+  @HttpCode(HttpStatus.OK)
+  async replaceEquipment(
+    @Param('id') id: string,
+    @Body() equipmentsId: CustomEquipmentInContract,
+  ): Promise<ELease> {
+    return await this.eleaseService.replaceEquipment(id, equipmentsId);
   }
 }

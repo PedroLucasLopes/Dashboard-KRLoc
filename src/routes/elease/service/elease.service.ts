@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -15,7 +16,9 @@ import { PrismaService } from 'src/global/prisma/prisma.service';
 import { FilterELeaseDto } from '../dto/filterELease.dto';
 import { PaginationConfig } from 'src/global/utils/pagination.utils';
 import { CreateELeaseDto } from '../dto/createELease.dto';
-import { CustomEquipmentInContract } from '../dto/customEquipmentInContract';
+import { CustomEquipmentInContract } from '../dto/customEquipmentInContract.dto';
+import { Equipment } from 'generated/prisma/browser';
+import { EquipmentsEditStatus } from '../dto/equipmentsEditStatus.dto';
 
 @Injectable()
 export class ELeaseService {
@@ -69,7 +72,7 @@ export class ELeaseService {
   }
 
   async findById(id: string): Promise<ELease> {
-    const foundELease = await this.prisma.eLease.findUnique({
+    const foundELease = await this.prisma.eLease.findFirst({
       where: { id },
       include: {
         lessee: {
@@ -96,7 +99,7 @@ export class ELeaseService {
             status: StatusEquipment.AVAILABLE,
           },
         });
-        const checkLesseeId = await tx.lessee.findUnique({
+        const checkLesseeId = await tx.lessee.findFirst({
           where: { id: leaseData.lesseeId },
         });
 
@@ -179,161 +182,173 @@ export class ELeaseService {
   }
 
   async startContract(id: string): Promise<ELease> {
-    const startContract = await this.prisma.$transaction(async (tx) => {
-      const lease = await tx.eLease.findUnique({
-        where: {
-          id,
-          status: LeaseStatus.PENDING,
-        },
-        include: {
-          equipments: {
+    const startContract = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const lease = await tx.eLease.findFirst({
+          where: {
+            id,
+            status: LeaseStatus.PENDING,
+          },
+          include: {
+            equipments: {
+              where: {
+                status: {
+                  not: StatusEquipment.PENDING,
+                },
+              },
+              select: { id: true, status: true },
+            },
+            lessee: { select: { name: true, clientId: true } },
+          },
+        });
+
+        if (!lease) {
+          throw new NotFoundException('Contract not found');
+        }
+
+        if (lease.status !== LeaseStatus.PENDING) {
+          throw new BadRequestException(`This contract is ${lease.status}`);
+        }
+
+        if (lease.equipments.length > 0) {
+          throw new BadRequestException(
+            'There are equipments associated with this contract that are not PENDING',
+          );
+        }
+
+        if (lease.contract_generated === null) {
+          throw new BadRequestException(
+            'Please generate the equipment lease contract before starting.',
+          );
+        }
+
+        const [start, ,] = await Promise.all([
+          tx.eLease.update({
+            where: { id, status: LeaseStatus.PENDING },
+            data: { status: LeaseStatus.ACTIVE },
+          }),
+
+          tx.equipment.updateMany({
             where: {
-              status: {
-                not: StatusEquipment.PENDING,
+              eleaseId: id,
+              status: StatusEquipment.PENDING,
+            },
+            data: { status: StatusEquipment.LEASED },
+          }),
+
+          tx.auditLog.create({
+            data: {
+              contractId: id,
+              action: AuditAction.CONTRACT_STARTED,
+              description: `Contract for ${lease.lessee.name} started`,
+              metadata: {
+                contractId: id,
+                reason: LeaseStatus.ACTIVE,
               },
             },
-            select: { id: true, status: true },
-          },
-          lessee: { select: { name: true, clientId: true } },
-        },
-      });
+          }),
 
-      if (!lease) {
-        throw new NotFoundException('Contract not found');
-      }
+          tx.leaseItem.updateMany({
+            where: { contractId: id, startStatus: StatusEquipment.PENDING },
+            data: {
+              startStatus: StatusEquipment.LEASED,
+            },
+          }),
+        ]);
 
-      if (lease.status !== LeaseStatus.PENDING) {
-        throw new BadRequestException(`This contract is ${lease.status}`);
-      }
-
-      if (lease.equipments.length > 0) {
-        throw new BadRequestException(
-          'There are equipments associated with this contract that are not PENDING',
-        );
-      }
-
-      const start = await tx.eLease.update({
-        where: { id },
-        data: { status: LeaseStatus.ACTIVE },
-      });
-
-      await tx.equipment.updateMany({
-        where: {
-          eleaseId: id,
-          status: StatusEquipment.PENDING,
-        },
-        data: { status: StatusEquipment.LEASED },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          contractId: id,
-          action: AuditAction.CONTRACT_STARTED,
-          description: `Contract for ${lease.lessee.name} started`,
-          metadata: {
-            contractId: id,
-            reason: LeaseStatus.ACTIVE,
-          },
-        },
-      });
-
-      await tx.leaseItem.updateMany({
-        where: { contractId: id, startStatus: StatusEquipment.PENDING },
-        data: {
-          startStatus: StatusEquipment.LEASED,
-        },
-      });
-
-      return start;
-    });
+        return start;
+      },
+    );
 
     if (!startContract) {
-      throw new InternalServerErrorException('Something went wrong');
+      throw new InternalServerErrorException('Something went wrong!');
     }
 
     return startContract;
   }
 
   async cancelContract(id: string): Promise<ELease> {
-    const cancelContract = await this.prisma.$transaction(async (tx) => {
-      const checkContract = await tx.eLease.findFirst({
-        where: {
-          id,
-          status: LeaseStatus.PENDING,
-          equipments: {
-            none: {
-              status: {
-                not: StatusEquipment.PENDING,
+    const cancelContract = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const checkContract = await tx.eLease.findFirst({
+          where: {
+            id,
+            status: LeaseStatus.PENDING,
+            equipments: {
+              none: {
+                status: {
+                  not: StatusEquipment.PENDING,
+                },
               },
             },
           },
-        },
-        include: {
-          equipments: {
-            select: { id: true },
-          },
-          lessee: {
-            select: { id: true, name: true, clientId: true },
-          },
-        },
-      });
-
-      if (!checkContract) {
-        throw new NotFoundException('This contract is already Active');
-      }
-
-      if (checkContract.equipments.length > 0) {
-        throw new BadRequestException(
-          'The contract cannot be canceled, some equipments need to be paid',
-        );
-      }
-
-      const [, updatedLease] = await Promise.all([
-        tx.equipment.updateMany({
-          where: {
-            eleaseId: id,
-            status: StatusEquipment.PENDING,
-          },
-          data: {
-            status: StatusEquipment.AVAILABLE,
-            eleaseId: null,
-          },
-        }),
-
-        tx.eLease.update({
-          where: { id },
-          data: {
-            status: LeaseStatus.CANCELLED,
-            finishDate: new Date(),
-          },
-        }),
-
-        tx.auditLog.create({
-          data: {
-            contractId: id,
-            action: AuditAction.CONTRACT_CANCELLED,
-            description: `Contract for ${checkContract.lessee.name} is canceled`,
-            metadata: {
-              contractId: id,
-              reason: LeaseStatus.CANCELLED,
+          include: {
+            equipments: {
+              select: { id: true },
+            },
+            lessee: {
+              select: { id: true, name: true, clientId: true },
             },
           },
-        }),
+        });
 
-        tx.leaseItem.updateMany({
-          where: {
-            contractId: id,
-            startStatus: StatusEquipment.PENDING,
-          },
-          data: {
-            finalStatus: StatusEquipment.AVAILABLE,
-            finishDate: new Date(),
-          },
-        }),
-      ]);
+        if (!checkContract) {
+          throw new NotFoundException('This contract is already Active');
+        }
 
-      return updatedLease;
-    });
+        if (checkContract.equipments.length > 0) {
+          throw new BadRequestException(
+            'The contract cannot be canceled, some equipments need to be paid',
+          );
+        }
+
+        const [, updatedLease] = await Promise.all([
+          tx.equipment.updateMany({
+            where: {
+              eleaseId: id,
+              status: StatusEquipment.PENDING,
+            },
+            data: {
+              status: StatusEquipment.AVAILABLE,
+              eleaseId: null,
+            },
+          }),
+
+          tx.eLease.update({
+            where: { id },
+            data: {
+              status: LeaseStatus.CANCELLED,
+              finishDate: new Date(),
+            },
+          }),
+
+          tx.auditLog.create({
+            data: {
+              contractId: id,
+              action: AuditAction.CONTRACT_CANCELLED,
+              description: `Contract for ${checkContract.lessee.name} is canceled`,
+              metadata: {
+                contractId: id,
+                reason: LeaseStatus.CANCELLED,
+              },
+            },
+          }),
+
+          tx.leaseItem.updateMany({
+            where: {
+              contractId: id,
+              startStatus: StatusEquipment.PENDING,
+            },
+            data: {
+              finalStatus: StatusEquipment.AVAILABLE,
+              finishDate: new Date(),
+            },
+          }),
+        ]);
+
+        return updatedLease;
+      },
+    );
 
     return cancelContract;
   }
@@ -342,91 +357,93 @@ export class ELeaseService {
     id: string,
     equipmentsId: CustomEquipmentInContract,
   ): Promise<ELease> {
-    const addEquipments = await this.prisma.$transaction(async (tx) => {
-      const checkContract = await tx.eLease.findFirst({
-        where: {
-          id,
-          status: LeaseStatus.PENDING,
-        },
-        include: {
-          lessee: {
-            select: {
-              name: true,
+    const addEquipments = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const checkContract = await tx.eLease.findFirst({
+          where: {
+            id,
+            status: LeaseStatus.PENDING,
+          },
+          include: {
+            lessee: {
+              select: {
+                name: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      if (!checkContract) {
-        throw new NotFoundException('Equipment Lease not Found');
-      }
+        if (!checkContract) {
+          throw new NotFoundException('Equipment Lease not Found');
+        }
 
-      const equipmentsFound = await tx.equipment.findMany({
-        where: {
-          id: { in: equipmentsId.equipments },
-          status: StatusEquipment.AVAILABLE,
-        },
-      });
+        const equipmentsFound = await tx.equipment.findMany({
+          where: {
+            id: { in: equipmentsId.equipments },
+            status: StatusEquipment.AVAILABLE,
+          },
+        });
 
-      if (equipmentsId.equipments.length > equipmentsFound.length) {
-        throw new BadRequestException('Some equipments are not found');
-      }
+        if (equipmentsId.equipments.length > equipmentsFound.length) {
+          throw new BadRequestException('Some equipments are not found');
+        }
 
-      if (equipmentsFound && checkContract) {
-        const [addEquipments, ,] = await Promise.all([
-          tx.eLease.update({
-            where: { id },
-            data: {
-              equipments: {
-                connect: equipmentsId.equipments.map((id) => ({ id })),
+        if (equipmentsFound && checkContract) {
+          const [addEquipments, ,] = await Promise.all([
+            tx.eLease.update({
+              where: { id },
+              data: {
+                equipments: {
+                  connect: equipmentsId.equipments.map((id) => ({ id })),
+                },
               },
-            },
-          }),
+            }),
 
-          tx.equipment.updateMany({
-            where: {
-              id: { in: equipmentsId.equipments },
-              status: StatusEquipment.AVAILABLE,
-            },
-            data: { status: StatusEquipment.PENDING },
-          }),
+            tx.equipment.updateMany({
+              where: {
+                id: { in: equipmentsId.equipments },
+                status: StatusEquipment.AVAILABLE,
+              },
+              data: { status: StatusEquipment.PENDING },
+            }),
 
-          tx.auditLog.create({
-            data: {
-              contractId: id,
-              action: AuditAction.EQUIPMENT_ADDED,
-              description: `Contract for ${checkContract.lessee.name} added some equipments`,
-              metadata: {
+            tx.auditLog.create({
+              data: {
                 contractId: id,
-                equipments: equipmentsFound,
+                action: AuditAction.EQUIPMENT_ADDED,
+                description: `Contract for ${checkContract.lessee.name} added some equipments`,
+                metadata: {
+                  contractId: id,
+                  equipments: equipmentsFound,
+                },
               },
-            },
-          }),
+            }),
 
-          tx.leaseItem.createMany({
-            data: equipmentsFound.map((equipment) => ({
-              contractId: checkContract.id,
-              equipmentId: equipment.id,
-              equipmentName: equipment.name,
-              equipmentCode: equipment.code,
-              equipmentSuffix: equipment.suffix,
-              p_diary: equipment.p_diary,
-              p_weekly: equipment.p_weekly,
-              p_biweekly: equipment.p_biweekly,
-              p_monthly: equipment.p_monthly,
-              p_indemnity: equipment.p_indemnity,
-              startDate: checkContract.startDate,
-              startStatus: StatusEquipment.PENDING,
-            })),
-          }),
-        ]);
+            tx.leaseItem.createMany({
+              data: equipmentsFound.map((equipment) => ({
+                contractId: checkContract.id,
+                equipmentId: equipment.id,
+                equipmentName: equipment.name,
+                equipmentCode: equipment.code,
+                equipmentSuffix: equipment.suffix,
+                p_diary: equipment.p_diary,
+                p_weekly: equipment.p_weekly,
+                p_biweekly: equipment.p_biweekly,
+                p_monthly: equipment.p_monthly,
+                p_indemnity: equipment.p_indemnity,
+                startDate: checkContract.startDate,
+                startStatus: StatusEquipment.PENDING,
+              })),
+            }),
+          ]);
 
-        return addEquipments;
-      }
-    });
+          return addEquipments;
+        }
+      },
+    );
 
     if (!addEquipments) {
-      throw new InternalServerErrorException('Something went wrong');
+      throw new InternalServerErrorException('Something went wrong!');
     }
 
     return addEquipments;
@@ -436,97 +453,449 @@ export class ELeaseService {
     id: string,
     equipmentsId: CustomEquipmentInContract,
   ): Promise<ELease> {
-    const removeEquipments = await this.prisma.$transaction(async (tx) => {
-      const contractExist = await tx.eLease.findFirst({
-        where: {
-          id,
-          status: LeaseStatus.PENDING,
-        },
-        include: {
-          lessee: {
-            select: { name: true },
+    const removeEquipments = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const contractExist = await tx.eLease.findFirst({
+          where: {
+            id,
+            status: LeaseStatus.PENDING,
           },
-          equipments: { select: { id: true } },
+          include: {
+            lessee: {
+              select: { name: true },
+            },
+            equipments: { select: { id: true } },
+          },
+        });
+
+        if (!contractExist) {
+          throw new NotFoundException('Equipment Lease not Found');
+        }
+
+        if (contractExist.status === LeaseStatus.ACTIVE) {
+          throw new BadRequestException('The contract is already Active');
+        }
+
+        if (contractExist.equipments.length === 1) {
+          throw new BadRequestException(
+            'You have only one equipment in your contract',
+          );
+        }
+
+        const equipmentsFound = await tx.equipment.findMany({
+          where: {
+            id: { in: equipmentsId.equipments },
+            status: StatusEquipment.PENDING,
+          },
+        });
+
+        if (equipmentsId.equipments.length > equipmentsFound.length) {
+          throw new BadRequestException('Some equipments are not available');
+        }
+
+        if (equipmentsFound && contractExist) {
+          const [removeEquipment, ,] = await Promise.all([
+            tx.eLease.update({
+              where: { id, status: LeaseStatus.PENDING },
+              data: {
+                equipments: {
+                  disconnect: equipmentsId.equipments.map((id) => ({ id })),
+                },
+              },
+            }),
+
+            tx.equipment.updateMany({
+              where: {
+                id: { in: equipmentsId.equipments },
+                status: StatusEquipment.PENDING,
+              },
+              data: {
+                status: StatusEquipment.AVAILABLE,
+              },
+            }),
+
+            tx.auditLog.create({
+              data: {
+                contractId: id,
+                action: AuditAction.EQUIPMENT_REMOVED,
+                description: `Contract for ${contractExist.lessee.name} removed some equipments`,
+                metadata: {
+                  contractId: id,
+                  equipments: equipmentsFound,
+                },
+              },
+            }),
+
+            tx.leaseItem.deleteMany({
+              where: {
+                contractId: id,
+                equipmentId: { in: equipmentsId.equipments },
+              },
+            }),
+          ]);
+
+          return removeEquipment;
+        }
+      },
+    );
+
+    if (!removeEquipments) {
+      throw new InternalServerErrorException('Something went wrong!');
+    }
+
+    return removeEquipments;
+  }
+
+  async setUpdateStatusEquipment(
+    id: string,
+    equipmentsId: EquipmentsEditStatus,
+  ): Promise<Equipment[]> {
+    const equipmentHash = equipmentsId.equipments.reduce(
+      (acc, item: { id: string; status: StatusEquipment }) => {
+        if (!acc[item.status]) {
+          acc[item.status] = [];
+        }
+
+        acc[item.status].push(item.id);
+
+        return acc;
+      },
+      {} as Record<StatusEquipment, string[]>,
+    );
+
+    const updateStatus = await Promise.all(
+      (Object.entries(equipmentHash) as [StatusEquipment, string[]][]).map(
+        ([status, ids]) =>
+          this.activeELeaseUpdateEquipment(id, { equipments: ids }, status),
+      ),
+    );
+
+    return updateStatus.flat();
+  }
+
+  private async activeELeaseUpdateEquipment(
+    id: string,
+    equipmentsId: CustomEquipmentInContract,
+    status: StatusEquipment,
+  ): Promise<Equipment[]> {
+    const updateEquipmentStatus = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const { equipments } = equipmentsId;
+        const contractExist = await tx.eLease.findFirst({
+          where: { id, status: LeaseStatus.ACTIVE },
+          include: {
+            equipments: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+            lessee: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
+
+        if (!contractExist) {
+          throw new NotFoundException('Contract not found');
+        }
+
+        const equipmentsFound = await tx.equipment.findMany({
+          where: {
+            id: { in: equipments },
+            status: StatusEquipment.LEASED,
+          },
+        });
+
+        console.log({ equipments, equipmentsFound, status });
+
+        if (equipmentsFound.length < equipments.length) {
+          throw new BadRequestException(
+            'Some equipments are not available to change',
+          );
+        }
+
+        if (contractExist && equipmentsFound.length === equipments.length) {
+          const keepELeaseId: StatusEquipment[] = [
+            StatusEquipment.STOLEN,
+            StatusEquipment.MAINTENANCE,
+          ];
+          await Promise.all([
+            tx.equipment.updateMany({
+              where: { id: { in: equipments }, status: StatusEquipment.LEASED },
+              data: {
+                eleaseId: keepELeaseId.includes(status)
+                  ? contractExist.id
+                  : null,
+                status: status,
+              },
+            }),
+
+            tx.auditLog.create({
+              data: {
+                contractId: id,
+                action: AuditAction.EQUIPMENT_STATUS_CHANGED,
+                description: `Contract for ${contractExist.lessee.name} changed some equipments status`,
+                metadata: {
+                  contractId: id,
+                  equipments: equipmentsFound.map((equipment) => ({
+                    ...equipment,
+                    status: status,
+                  })),
+                },
+              },
+            }),
+
+            tx.leaseItem.updateMany({
+              where: {
+                contractId: id,
+                equipmentId: { in: equipments },
+                startStatus: StatusEquipment.LEASED,
+              },
+              data: {
+                finalStatus: status,
+                finishDate:
+                  status === StatusEquipment.STOLEN ? null : new Date(),
+              },
+            }),
+          ]);
+
+          return { ...equipmentsFound, status };
+        }
+      },
+    );
+
+    if (!updateEquipmentStatus) {
+      throw new InternalServerErrorException('Something went wrong!');
+    }
+
+    return updateEquipmentStatus;
+  }
+
+  async replaceEquipment(
+    id: string,
+    equipmentsId: CustomEquipmentInContract,
+  ): Promise<ELease> {
+    const { equipments } = equipmentsId;
+    const findContract = await this.prisma.eLease.findFirst({
+      where: { id, status: LeaseStatus.ACTIVE },
+      include: {
+        leaseItems: {
+          select: { equipmentId: true, equipmentCode: true },
+          where: {
+            finalStatus: StatusEquipment.MAINTENANCE,
+          },
         },
-      });
+        lessee: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
 
-      if (!contractExist) {
-        throw new NotFoundException('Equipment Lease not Found');
-      }
+    if (!findContract) {
+      throw new NotFoundException('Contract not found');
+    }
 
-      if (contractExist.status === LeaseStatus.ACTIVE) {
-        throw new BadRequestException('The contract is already Active');
-      }
+    if (!findContract.leaseItems.length) {
+      throw new BadRequestException(
+        'No equipments in maintenance to substitute',
+      );
+    }
 
-      if (contractExist.equipments.length === 1) {
+    if (equipments.length > findContract.leaseItems.length) {
+      throw new BadRequestException(
+        'You are trying to substitute more equipments than necessary',
+      );
+    }
+
+    const findAvailableEquipments = await this.prisma.equipment.findMany({
+      where: { id: { in: equipments }, status: StatusEquipment.AVAILABLE },
+    });
+
+    if (findAvailableEquipments.length < equipments.length) {
+      throw new BadRequestException('Some equipments are not available');
+    }
+
+    const maintenanceItems = [...findContract.leaseItems];
+
+    const replacements: { old: string[]; current: Equipment[] } = {
+      old: [],
+      current: [],
+    };
+
+    for (const newEquipment of findAvailableEquipments) {
+      const matchIndex = maintenanceItems.findIndex(
+        (item) => item.equipmentCode === newEquipment.code,
+      );
+
+      if (matchIndex === -1) {
         throw new BadRequestException(
-          'You have only one equipment in your contract',
+          `Equipment ${newEquipment.code} is not compatible with maintenance items`,
         );
       }
 
-      const equipmentsFound = await tx.equipment.findMany({
-        where: {
-          id: { in: equipmentsId.equipments },
-          status: StatusEquipment.PENDING,
-        },
-      });
+      replacements.old.push(maintenanceItems[matchIndex].equipmentId);
+      replacements.current.push(newEquipment);
+    }
 
-      if (equipmentsId.equipments.length > equipmentsFound.length) {
-        throw new BadRequestException('Some equipments are not available');
-      }
+    const { old, current } = replacements;
 
-      if (equipmentsFound && contractExist) {
-        const [removeEquipment, ,] = await Promise.all([
+    const replaceEquipments = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const [, , updateLease, ,] = await Promise.all([
           tx.eLease.update({
-            where: { id, status: LeaseStatus.PENDING },
+            where: { id, status: LeaseStatus.ACTIVE },
             data: {
               equipments: {
-                disconnect: equipmentsId.equipments.map((id) => ({ id })),
+                disconnect: old.map((equipmentId) => ({
+                  id: equipmentId,
+                })),
               },
             },
           }),
 
           tx.equipment.updateMany({
             where: {
-              id: { in: equipmentsId.equipments },
-              status: StatusEquipment.PENDING,
+              id: { in: current.map((e) => e.id) },
+              status: StatusEquipment.AVAILABLE,
             },
             data: {
-              eleaseId: null,
-              status: StatusEquipment.AVAILABLE,
+              status: StatusEquipment.REPLACE,
+            },
+          }),
+
+          tx.eLease.update({
+            where: { id, status: LeaseStatus.ACTIVE },
+            data: {
+              equipments: {
+                connect: current.map(({ id }) => ({
+                  id,
+                })),
+              },
             },
           }),
 
           tx.auditLog.create({
             data: {
-              contractId: id,
-              action: AuditAction.EQUIPMENT_REMOVED,
-              description: `Contract for ${contractExist.lessee.name} removed some equipments`,
+              contractId: findContract.id,
+              action: AuditAction.EQUIPMENT_REPLACE,
+              description: `Contract for ${findContract.lessee.name} replaced equipments`,
               metadata: {
-                contractId: id,
-                equipments: equipmentsFound,
+                equipments: current,
+                startDate: findContract.startDate,
+                status: LeaseStatus.ACTIVE,
               },
             },
           }),
 
-          tx.leaseItem.deleteMany({
-            where: {
-              contractId: id,
-              equipmentId: { in: equipmentsId.equipments },
+          tx.leaseItem.createMany({
+            data: current.map((equipment) => ({
+              contractId: findContract.id,
+              equipmentId: equipment.id,
+              equipmentName: equipment.name,
+              equipmentCode: equipment.code,
+              equipmentSuffix: equipment.suffix,
+              p_diary: equipment.p_diary,
+              p_weekly: equipment.p_weekly,
+              p_biweekly: equipment.p_biweekly,
+              p_monthly: equipment.p_monthly,
+              p_indemnity: equipment.p_indemnity,
+              startStatus: StatusEquipment.REPLACE,
+              startDate: new Date(),
+            })),
+          }),
+        ]);
+
+        return updateLease;
+      },
+    );
+
+    if (!replaceEquipments) {
+      throw new InternalServerErrorException('something went wrong!');
+    }
+
+    return replaceEquipments;
+  }
+
+  async closeContract(id: string): Promise<ELease> {
+    const closeContract = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const findContract = await tx.eLease.findFirst({
+          where: {
+            id,
+            status: LeaseStatus.ACTIVE,
+          },
+          include: {
+            leaseItems: {
+              where: {
+                OR: [
+                  { finishDate: null },
+                  { finalStatus: null },
+                  { finalStatus: StatusEquipment.STOLEN },
+                ],
+              },
+            },
+            lessee: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
+
+        if (!findContract) {
+          throw new NotFoundException('Contract not found');
+        }
+
+        if (findContract.leaseItems.length > 0) {
+          throw new BadRequestException({
+            message: 'Some equipment has not yet been returned',
+            statusCode: HttpStatus.BAD_REQUEST,
+            equipments: findContract.leaseItems,
+          });
+        }
+
+        const [close, ,] = await Promise.all([
+          tx.eLease.update({
+            where: { id },
+            data: {
+              status: LeaseStatus.COMPLETED,
+              finishDate: new Date(),
+              equipments: {
+                disconnect: findContract.leaseItems.map((e) => ({
+                  id: e.id,
+                })),
+              },
+            },
+          }),
+
+          tx.auditLog.create({
+            data: {
+              contractId: findContract.id,
+              action: AuditAction.CONTRACT_COMPLETED,
+              description: `Contract for ${findContract.lessee.name} is completed`,
+              metadata: {
+                lesseeName: findContract.lessee.name,
+                startDate: findContract.startDate,
+                finishDate: findContract.finishDate,
+                status: LeaseStatus.COMPLETED,
+              },
             },
           }),
         ]);
 
-        return removeEquipment;
-      }
-    });
+        return close;
+      },
+    );
 
-    if (!removeEquipments) {
+    if (!closeContract) {
       throw new InternalServerErrorException('Something went wrong');
     }
 
-    return removeEquipments;
+    return closeContract;
   }
-
-  //   async deleteELease(id: string): Promise<void> {}
 }
