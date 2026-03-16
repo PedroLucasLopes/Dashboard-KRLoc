@@ -1,70 +1,48 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
 import {
-  Document,
-  Paragraph,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  AlignmentType,
-  WidthType,
-  Packer,
-  BorderStyle,
-  VerticalAlign,
-  Header,
-  ImageRun,
-  HorizontalPositionRelativeFrom,
-  VerticalPositionRelativeFrom,
-  TextWrappingType,
-  VerticalPositionAlign,
-  HorizontalPositionAlign,
-} from 'docx';
+  BadRequestException,
+  Injectable,
+  NotAcceptableException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Response } from 'express';
-import * as fs from 'fs';
-import * as path from 'path';
-import { ELeaseById } from '../../elease/dto/eLeaseById.dto';
-import { labelValue, text12, text9 } from '../helper/textFormat.helper';
-import { LeaseItem, LeaseStatus } from 'generated/prisma/client';
-import { ELeaseService } from 'src/routes/elease/service/elease.service';
-import contractModel from '../utils/contract.json';
-import { ContractEquipment } from '../types/contractEquipment';
+import { LeaseStatus } from 'generated/prisma/client';
 import { PrismaService } from 'src/global/prisma/prisma.service';
+import { FinantialReportDto } from '../dto/finantialReport.dto';
+import { FileService } from './file.service';
 
 @Injectable()
 export class DocumentService {
   constructor(
-    private eLeaseService: ELeaseService,
     private prisma: PrismaService,
+    private file: FileService,
   ) {}
 
-  public async generate(id: string, res: Response): Promise<void> {
-    const contract = (await this.eLeaseService.findById(id)) as ELeaseById;
-    let fileName = '';
-    let buffer = [] as unknown as Buffer<ArrayBufferLike>;
-
-    switch (contract.status) {
-      case LeaseStatus.PENDING:
-        buffer = await this.generateContract(contract);
-        fileName = `Contrato ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
-
-        await this.prisma.eLease.update({
-          where: { id: contract.id },
-          data: {
-            contract_generated: new Date(),
+  public async generateContract(id: string, res: Response): Promise<void> {
+    const contract = await this.prisma.eLease.findFirst({
+      where: { id, status: LeaseStatus.PENDING },
+      include: {
+        leaseItems: true,
+        lessee: {
+          include: {
+            client: true,
           },
-        });
-        break;
+        },
+      },
+    });
 
-      case LeaseStatus.COMPLETED:
-        buffer = await this.generateContractClosure(contract);
-        fileName = `Fechamento ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
-        break;
-
-      default:
-        throw new BadRequestException(
-          'Contract must be PENDING or COMPLETED to generate a document',
-        );
+    if (!contract) {
+      throw new NotAcceptableException('Contract not found');
     }
+
+    const buffer = await this.file.contract(contract);
+    const fileName = `Contrato ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
+
+    await this.prisma.eLease.update({
+      where: { id: contract.id },
+      data: {
+        contract_generated: new Date(),
+      },
+    });
 
     res.set({
       'Content-Type':
@@ -78,428 +56,100 @@ export class DocumentService {
     res.send(buffer);
   }
 
-  private async generateContract(data: ELeaseById): Promise<Buffer> {
-    const lessee = data.lessee;
-    const equipments = data.leaseItems;
+  public async generateFinantialReport(
+    id: string,
+    res: Response,
+    body: FinantialReportDto,
+  ): Promise<void> {
+    const { startDate, endDate } = body;
 
-    const { equipment, client, clientLessee, headers, paragraph } =
-      contractModel as ContractEquipment;
-
-    const startDate = new Date(data.startDate).toLocaleString('pt-BR');
-    const endDate = new Date(data.endDate).toLocaleString('pt-BR');
-
-    const noBorders = {
-      top: { style: BorderStyle.NONE, size: 0 },
-      bottom: { style: BorderStyle.NONE, size: 0 },
-      left: { style: BorderStyle.NONE, size: 0 },
-      right: { style: BorderStyle.NONE, size: 0 },
-      insideHorizontal: { style: BorderStyle.NONE, size: 0 },
-      insideVertical: { style: BorderStyle.NONE, size: 0 },
-    };
-
-    const logo = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/global/assets/logo.png'),
+    const start = new Date(
+      `${new Date(startDate).toISOString().split('T')[0]}T00:00:00.000Z`,
+    );
+    const end = new Date(
+      `${new Date(endDate).toISOString().split('T')[0]}T23:59:59.999Z`,
     );
 
-    const signatures = new Table({
-      width: {
-        size: 100,
-        type: WidthType.PERCENTAGE,
-      },
-      borders: noBorders,
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: '____________________________________________',
-                  alignment: AlignmentType.CENTER,
-                }),
-              ],
-            }),
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: '____________________________________________',
-                  alignment: AlignmentType.CENTER,
-                }),
-              ],
-            }),
-          ],
-        }),
-        new TableRow({
-          children: [
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: headers.titles.owner,
-                  alignment: AlignmentType.CENTER,
-                }),
-              ],
-            }),
-            new TableCell({
-              children: [
-                new Paragraph({
-                  text: headers.titles.renter,
-                  alignment: AlignmentType.CENTER,
-                }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
-
-    const header = new Header({
-      children: [
-        new Paragraph({
-          children: [
-            new ImageRun({
-              data: logo,
-              type: 'png',
-              transformation: {
-                width: 286,
-                height: 138,
-              },
-              floating: {
-                horizontalPosition: {
-                  relative: HorizontalPositionRelativeFrom.PAGE,
-                  align: HorizontalPositionAlign.CENTER,
-                },
-                verticalPosition: {
-                  relative: VerticalPositionRelativeFrom.PAGE,
-                  align: VerticalPositionAlign.CENTER,
-                },
-                wrap: {
-                  type: TextWrappingType.NONE,
-                },
-              },
-            }),
-          ],
-        }),
-      ],
-    });
-
-    const equipmentRows = equipments.map((eq: LeaseItem) => {
-      return new TableRow({
-        children: [
-          new TableCell({
-            verticalAlign: VerticalAlign.CENTER,
-            children: [text12(String(1))],
-          }),
-          new TableCell({
-            verticalAlign: VerticalAlign.CENTER,
-            children: [text12(eq.equipmentName ?? '')],
-          }),
-          new TableCell({
-            verticalAlign: VerticalAlign.CENTER,
-            children: [
-              text12(`${eq.equipmentCode ?? ''}-${eq.equipmentSuffix ?? ''}`),
-            ],
-          }),
-          new TableCell({
-            verticalAlign: VerticalAlign.CENTER,
-            children: [
-              text12(
-                `${equipment.table.columns.currency}${Number(eq.p_indemnity ?? '-')}`,
-              ),
-            ],
-          }),
-          new TableCell({
-            verticalAlign: VerticalAlign.CENTER,
-            children: [text12(`-`)],
-          }),
-        ],
-      });
-    });
-
-    const equipmentTable = new Table({
-      width: {
-        size: 100,
-        type: WidthType.PERCENTAGE,
-      },
-      borders: noBorders,
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              verticalAlign: VerticalAlign.CENTER,
-              children: [text12(equipment.table.columns.quantity, true)],
-            }),
-            new TableCell({
-              verticalAlign: VerticalAlign.CENTER,
-              children: [text12(equipment.table.columns.product, true)],
-            }),
-            new TableCell({
-              verticalAlign: VerticalAlign.CENTER,
-              children: [text12(equipment.table.columns.model, true)],
-            }),
-            new TableCell({
-              verticalAlign: VerticalAlign.CENTER,
-              children: [text12(equipment.table.columns.indemnity, true)],
-            }),
-            new TableCell({
-              verticalAlign: VerticalAlign.CENTER,
-              children: [text12(equipment.table.columns.elease, true)],
-            }),
-          ],
-        }),
-        ...equipmentRows,
-      ],
-    });
-
-    const clientTable = new Table({
-      width: {
-        size: 100,
-        type: WidthType.PERCENTAGE,
-      },
-      borders: noBorders,
-      rows: [
-        new TableRow({
-          children: [
-            new TableCell({
-              width: {
-                size: 40,
-                type: WidthType.PERCENTAGE,
-              },
-              children: [
-                labelValue(client.table.columns.name, lessee.client.name),
-              ],
-            }),
-            new TableCell({
-              width: {
-                size: 30,
-                type: WidthType.PERCENTAGE,
-              },
-              children: [
-                labelValue(client.table.columns.tax_id, lessee.client.tax_id),
-              ],
-            }),
-            new TableCell({
-              width: {
-                size: 30,
-                type: WidthType.PERCENTAGE,
-              },
-              children: [
-                labelValue(client.table.columns.phone, lessee.client.phone),
-              ],
-            }),
-          ],
-        }),
-        new TableRow({
-          children: [
-            new TableCell({
-              columnSpan: 2,
-              children: [
-                labelValue(
-                  client.table.columns.address,
-                  `${lessee.client.address ?? ''}, ${lessee.client.neighborhood ?? ''}, ${lessee.client.city ?? ''}/${lessee.client.state ?? ''}`,
-                ),
-              ],
-            }),
-            new TableCell({
-              children: [
-                labelValue(client.table.columns.zipcode, lessee.client.zipcode),
-              ],
-            }),
-          ],
-        }),
-        new TableRow({
-          children: [
-            new TableCell({
-              columnSpan: 3,
-              children: [
-                labelValue(
-                  clientLessee.table.columns.tax_address,
-                  `${lessee.address}, ${lessee.neighborhood}, ${lessee.city}/${lessee.state}`,
-                ),
-              ],
-            }),
-          ],
-        }),
-        new TableRow({
-          children: [
-            new TableCell({
-              columnSpan: 2,
-              children: [
-                labelValue(clientLessee.table.columns.place, lessee.name),
-              ],
-            }),
-            new TableCell({
-              children: [
-                labelValue(clientLessee.table.columns.zipcode, lessee.zipcode),
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
-
-    const contract = new Document({
-      sections: [
-        {
-          headers: {
-            default: header,
-          },
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: 'CALIBRI',
-                  text: headers.titles.eleaseContract,
-                  bold: true,
-                  size: 32,
-                }),
-              ],
-            }),
-
-            new Paragraph(''),
-
-            new Paragraph(paragraph.start),
-
-            new Paragraph(''),
-
-            clientTable,
-
-            new Paragraph(''),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: 'CALIBRI',
-                  text: headers.titles.contractValue,
-                  bold: true,
-                }),
-              ],
-            }),
-
-            new Paragraph(''),
-
-            equipmentTable,
-
-            new Paragraph(''),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: 'CALIBRI',
-                  text: headers.titles.rentDate,
-                  bold: true,
-                }),
-              ],
-            }),
-
-            new Paragraph(''),
-
-            new Paragraph(
-              `${paragraph.startDate} ${startDate} ${paragraph.endDate} ${endDate}.`,
-            ),
-
-            new Paragraph(''),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: 'CALIBRI',
-                  text: headers.titles.contractValue,
-                  bold: true,
-                }),
-              ],
-            }),
-
-            new Paragraph(''),
-
-            new Paragraph(
-              `${paragraph.totalValue} ${equipment.table.columns.currency}xx,xx`,
-            ),
-
-            new Paragraph(''),
-
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  font: 'CALIBRI',
-                  text: headers.titles.conditions,
-                  bold: true,
-                }),
-              ],
-            }),
-
-            new Paragraph(''),
-
-            text9(paragraph.clausules.first),
-            new Paragraph(''),
-            text9(paragraph.clausules.firstParagraph),
-            new Paragraph(''),
-            text9(paragraph.clausules.secondParagraph),
-            new Paragraph(''),
-            text9(paragraph.clausules.second),
-            new Paragraph(''),
-            text9(paragraph.clausules.third),
-            new Paragraph(''),
-            text9(paragraph.clausules.fourth),
-            new Paragraph(''),
-            text9(paragraph.clausules.fifth),
-            new Paragraph(''),
-            text9(paragraph.clausules.sixthParagraph),
-            new Paragraph(''),
-            text9(paragraph.clausules.sixth),
-            new Paragraph(''),
-            text9(paragraph.clausules.seventh),
-            new Paragraph(''),
-            text9(paragraph.clausules.eighth),
-            new Paragraph(''),
-            text9(paragraph.clausules.nineth),
-            new Paragraph(''),
-            text9(paragraph.clausules.tenth),
-            new Paragraph(''),
-            text9(paragraph.clausules.eleventh),
-            new Paragraph(''),
-            text9(paragraph.clausules.twelveth),
-            new Paragraph(''),
-            text9(paragraph.clausules.thirteenth),
-            new Paragraph(''),
-            text9(paragraph.clausules.fourteenth),
-            new Paragraph(''),
-            text9(paragraph.clausules.fifteenth),
-            new Paragraph(''),
-            text9(paragraph.clausules.sixteenth),
-            new Paragraph(''),
-            text9(paragraph.clausules.seventeenth),
-            new Paragraph(''),
-            text9(paragraph.clausules.footer),
-            new Paragraph(''),
-            text9(
-              `Local e data: Contagem, ${new Date().toLocaleDateString(
-                'pt-BR',
-              )}`,
-            ),
-            new Paragraph({
-              spacing: {
-                after: 600,
-              },
-            }),
-
-            signatures,
-          ],
+    const contract = await this.prisma.eLease.findFirst({
+      where: { id, status: LeaseStatus.ACTIVE },
+      include: {
+        lessee: {
+          include: { client: true },
         },
-      ],
+        leaseItems: {
+          where: {
+            startDate: { lte: new Date(end) },
+            OR: [
+              { finishDate: null },
+              {
+                finishDate: {
+                  gte: new Date(start),
+                  lte: new Date(end),
+                },
+              },
+            ],
+          },
+        },
+      },
     });
 
-    const buffer = await Packer.toBuffer(contract);
-    return buffer;
+    if (!contract) {
+      throw new NotFoundException('Contract not found');
+    }
+
+    if (contract.leaseItems && !contract.leaseItems) {
+      throw new BadRequestException(
+        'No equipment activity found for this period',
+      );
+    }
+
+    const buffer = await this.file.finantialReport(contract);
+    const fileName = `Baixa ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="contrato.docx"; filename*=UTF-8''${encodeURIComponent(
+        fileName,
+      )}`,
+      'Content-Length': buffer.length,
+    });
+
+    res.send(buffer);
   }
 
-  private async generateContractClosure(data: ELeaseById): Promise<Buffer> {
-    console.log(data);
-    const finantialClosure = new Document({ sections: [] });
-    const buffer = await Packer.toBuffer(finantialClosure);
-    return buffer;
+  public async generateContractClosure(
+    id: string,
+    res: Response,
+  ): Promise<void> {
+    const contract = await this.prisma.eLease.findFirst({
+      where: { id, status: LeaseStatus.COMPLETED },
+      include: {
+        leaseItems: true,
+        lessee: {
+          include: {
+            client: true,
+          },
+        },
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundException('contract not found');
+    }
+
+    const buffer = await this.file.contractClosure(contract);
+    const fileName = `Fechamento ${contract.lessee.name} - ${contract.lessee.client.name} ${contract.startDate.toLocaleDateString('pt-BR')}.docx`;
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="contrato.docx"; filename*=UTF-8''${encodeURIComponent(
+        fileName,
+      )}`,
+      'Content-Length': buffer.length,
+    });
+
+    res.send(buffer);
   }
 }

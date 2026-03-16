@@ -1,37 +1,10 @@
-import { ELease, LeaseItem, LeaseStatus } from 'generated/prisma/client';
+import { Prisma } from 'generated/prisma/client';
 
-export class ELeaseById implements ELease {
-  contract_generated: Date | null;
-  id: string;
-  startDate: Date;
-  endDate: Date;
-  status: LeaseStatus;
-  createdAt: Date;
-  updatedAt: Date;
-  lesseeId: string;
-  finishDate: Date | null;
-
-  lessee: {
-    id: string;
-    name: string;
-    address: string;
-    zipcode: string;
-    city: string;
-    neighborhood: string;
-    state: string;
-
-    client: {
-      id: string;
-      name: string;
-      tax_id: string;
-      phone: string;
-      address: string;
-      zipcode: string;
-      city: string;
-      neighborhood: string;
-      state: string;
+export type ELeaseById = Prisma.ELeaseGetPayload<{
+  include: {
+    leaseItems: true;
+    lessee: {
+      include: { client: true };
     };
   };
-
-  leaseItems: LeaseItem[];
-}
+}>;

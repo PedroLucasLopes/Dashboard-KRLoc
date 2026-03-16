@@ -1,0 +1,468 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
+
+import { Injectable } from '@nestjs/common';
+import {
+  Document,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  AlignmentType,
+  WidthType,
+  Packer,
+  BorderStyle,
+  VerticalAlign,
+  Header,
+  ImageRun,
+  HorizontalPositionRelativeFrom,
+  VerticalPositionRelativeFrom,
+  TextWrappingType,
+  VerticalPositionAlign,
+  HorizontalPositionAlign,
+} from 'docx';
+import * as fs from 'fs';
+import * as path from 'path';
+import contractModel from '../utils/contract.json';
+import { labelValue, text12, text9 } from '../helper/textFormat.helper';
+import { ContractEquipment } from '../types/contractEquipment';
+import { ELeaseById } from 'src/routes/elease/dto/eLeaseById.dto';
+import { ELease, LeaseItem } from 'generated/prisma/client';
+
+@Injectable()
+export class FileService {
+  constructor() {}
+  async contract(data: ELeaseById): Promise<Buffer> {
+    const lessee = data.lessee;
+    const equipments = data.leaseItems;
+    const { equipment, client, clientLessee, headers, paragraph } =
+      contractModel as ContractEquipment;
+
+    const startDate = new Date(data.startDate).toLocaleString('pt-BR');
+    const endDate = new Date(data.endDate).toLocaleString('pt-BR');
+
+    const noBorders = {
+      top: { style: BorderStyle.NONE, size: 0 },
+      bottom: { style: BorderStyle.NONE, size: 0 },
+      left: { style: BorderStyle.NONE, size: 0 },
+      right: { style: BorderStyle.NONE, size: 0 },
+      insideHorizontal: { style: BorderStyle.NONE, size: 0 },
+      insideVertical: { style: BorderStyle.NONE, size: 0 },
+    };
+
+    const logo = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/global/assets/logo.png'),
+    );
+
+    const signatures = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: noBorders,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({
+                  text: '____________________________________________',
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  text: '____________________________________________',
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({
+                  text: headers.titles.owner,
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  text: headers.titles.renter,
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const header = new Header({
+      children: [
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: logo,
+              type: 'png',
+              transformation: {
+                width: 286,
+                height: 138,
+              },
+              floating: {
+                horizontalPosition: {
+                  relative: HorizontalPositionRelativeFrom.PAGE,
+                  align: HorizontalPositionAlign.CENTER,
+                },
+                verticalPosition: {
+                  relative: VerticalPositionRelativeFrom.PAGE,
+                  align: VerticalPositionAlign.CENTER,
+                },
+                wrap: {
+                  type: TextWrappingType.NONE,
+                },
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const equipmentRows = equipments.map((eq: LeaseItem) => {
+      return new TableRow({
+        children: [
+          new TableCell({
+            verticalAlign: VerticalAlign.CENTER,
+            children: [text12(String(1))],
+          }),
+          new TableCell({
+            verticalAlign: VerticalAlign.CENTER,
+            children: [text12(eq.equipmentName ?? '')],
+          }),
+          new TableCell({
+            verticalAlign: VerticalAlign.CENTER,
+            children: [
+              text12(`${eq.equipmentCode ?? ''}-${eq.equipmentSuffix ?? ''}`),
+            ],
+          }),
+          new TableCell({
+            verticalAlign: VerticalAlign.CENTER,
+            children: [
+              text12(
+                `${equipment.table.columns.currency}${Number(eq.p_indemnity ?? '-')}`,
+              ),
+            ],
+          }),
+          new TableCell({
+            verticalAlign: VerticalAlign.CENTER,
+            children: [text12(`-`)],
+          }),
+        ],
+      });
+    });
+
+    const equipmentTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: noBorders,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              verticalAlign: VerticalAlign.CENTER,
+              children: [text12(equipment.table.columns.quantity, true)],
+            }),
+            new TableCell({
+              verticalAlign: VerticalAlign.CENTER,
+              children: [text12(equipment.table.columns.product, true)],
+            }),
+            new TableCell({
+              verticalAlign: VerticalAlign.CENTER,
+              children: [text12(equipment.table.columns.model, true)],
+            }),
+            new TableCell({
+              verticalAlign: VerticalAlign.CENTER,
+              children: [text12(equipment.table.columns.indemnity, true)],
+            }),
+            new TableCell({
+              verticalAlign: VerticalAlign.CENTER,
+              children: [text12(equipment.table.columns.elease, true)],
+            }),
+          ],
+        }),
+        ...equipmentRows,
+      ],
+    });
+
+    const clientTable = new Table({
+      width: {
+        size: 100,
+        type: WidthType.PERCENTAGE,
+      },
+      borders: noBorders,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              width: {
+                size: 40,
+                type: WidthType.PERCENTAGE,
+              },
+              children: [
+                labelValue(client.table.columns.name, lessee.client.name),
+              ],
+            }),
+            new TableCell({
+              width: {
+                size: 30,
+                type: WidthType.PERCENTAGE,
+              },
+              children: [
+                labelValue(client.table.columns.tax_id, lessee.client.tax_id),
+              ],
+            }),
+            new TableCell({
+              width: {
+                size: 30,
+                type: WidthType.PERCENTAGE,
+              },
+              children: [
+                labelValue(
+                  client.table.columns.phone,
+                  lessee.client.phone ?? '',
+                ),
+              ],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              columnSpan: 2,
+              children: [
+                labelValue(
+                  client.table.columns.address,
+                  `${lessee.client.address ?? ''}, ${lessee.client.neighborhood ?? ''}, ${lessee.client.city ?? ''}/${lessee.client.state ?? ''}`,
+                ),
+              ],
+            }),
+            new TableCell({
+              children: [
+                labelValue(client.table.columns.zipcode, lessee.client.zipcode),
+              ],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              columnSpan: 3,
+              children: [
+                labelValue(
+                  clientLessee.table.columns.tax_address,
+                  `${lessee.address}, ${lessee.neighborhood}, ${lessee.city}/${lessee.state}`,
+                ),
+              ],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              columnSpan: 2,
+              children: [
+                labelValue(clientLessee.table.columns.place, lessee.name),
+              ],
+            }),
+            new TableCell({
+              children: [
+                labelValue(clientLessee.table.columns.zipcode, lessee.zipcode),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const contract = new Document({
+      sections: [
+        {
+          headers: {
+            default: header,
+          },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  font: 'CALIBRI',
+                  text: headers.titles.eleaseContract,
+                  bold: true,
+                  size: 32,
+                }),
+              ],
+            }),
+
+            new Paragraph(''),
+
+            new Paragraph(paragraph.start),
+
+            new Paragraph(''),
+
+            clientTable,
+
+            new Paragraph(''),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  font: 'CALIBRI',
+                  text: headers.titles.contractValue,
+                  bold: true,
+                }),
+              ],
+            }),
+
+            new Paragraph(''),
+
+            equipmentTable,
+
+            new Paragraph(''),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  font: 'CALIBRI',
+                  text: headers.titles.rentDate,
+                  bold: true,
+                }),
+              ],
+            }),
+
+            new Paragraph(''),
+
+            new Paragraph(
+              `${paragraph.startDate} ${startDate} ${paragraph.endDate} ${endDate}.`,
+            ),
+
+            new Paragraph(''),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  font: 'CALIBRI',
+                  text: headers.titles.contractValue,
+                  bold: true,
+                }),
+              ],
+            }),
+
+            new Paragraph(''),
+
+            new Paragraph(
+              `${paragraph.totalValue} ${equipment.table.columns.currency}xx,xx`,
+            ),
+
+            new Paragraph(''),
+
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  font: 'CALIBRI',
+                  text: headers.titles.conditions,
+                  bold: true,
+                }),
+              ],
+            }),
+
+            new Paragraph(''),
+
+            text9(paragraph.clausules.first),
+            new Paragraph(''),
+            text9(paragraph.clausules.firstParagraph),
+            new Paragraph(''),
+            text9(paragraph.clausules.secondParagraph),
+            new Paragraph(''),
+            text9(paragraph.clausules.second),
+            new Paragraph(''),
+            text9(paragraph.clausules.third),
+            new Paragraph(''),
+            text9(paragraph.clausules.fourth),
+            new Paragraph(''),
+            text9(paragraph.clausules.fifth),
+            new Paragraph(''),
+            text9(paragraph.clausules.sixthParagraph),
+            new Paragraph(''),
+            text9(paragraph.clausules.sixth),
+            new Paragraph(''),
+            text9(paragraph.clausules.seventh),
+            new Paragraph(''),
+            text9(paragraph.clausules.eighth),
+            new Paragraph(''),
+            text9(paragraph.clausules.nineth),
+            new Paragraph(''),
+            text9(paragraph.clausules.tenth),
+            new Paragraph(''),
+            text9(paragraph.clausules.eleventh),
+            new Paragraph(''),
+            text9(paragraph.clausules.twelveth),
+            new Paragraph(''),
+            text9(paragraph.clausules.thirteenth),
+            new Paragraph(''),
+            text9(paragraph.clausules.fourteenth),
+            new Paragraph(''),
+            text9(paragraph.clausules.fifteenth),
+            new Paragraph(''),
+            text9(paragraph.clausules.sixteenth),
+            new Paragraph(''),
+            text9(paragraph.clausules.seventeenth),
+            new Paragraph(''),
+            text9(paragraph.clausules.footer),
+            new Paragraph(''),
+            text9(
+              `Local e data: Contagem, ${new Date().toLocaleDateString(
+                'pt-BR',
+              )}`,
+            ),
+            new Paragraph({
+              spacing: {
+                after: 600,
+              },
+            }),
+
+            signatures,
+          ],
+        },
+      ],
+    });
+
+    const buffer = await Packer.toBuffer(contract);
+    return buffer;
+  }
+
+  async finantialReport(data: ELease): Promise<Buffer> {
+    console.log(data);
+    const finantialReport = new Document({ sections: [] });
+    const buffer = await Packer.toBuffer(finantialReport);
+    return buffer;
+  }
+
+  async contractClosure(data: ELeaseById): Promise<Buffer> {
+    console.log(data);
+    const contractClosure = new Document({ sections: [] });
+    const buffer = await Packer.toBuffer(contractClosure);
+    return buffer;
+  }
+}

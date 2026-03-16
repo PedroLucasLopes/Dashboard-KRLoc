@@ -14,6 +14,8 @@ import { LesseeModule } from './routes/lessee/lessee.module';
 import { ELeaseModule } from './routes/elease/elease.module';
 import { HttpModule } from '@nestjs/axios';
 import { DocumentModule } from './routes/document/document.module';
+import { FinantialModule } from './routes/finantial/finantial.module';
+import { AccessoryModule } from './routes/accessory/accessory.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { DocumentModule } from './routes/document/document.module';
     LesseeModule,
     ELeaseModule,
     DocumentModule,
+    FinantialModule,
+    AccessoryModule,
   ],
   controllers: [AppController],
   providers: [

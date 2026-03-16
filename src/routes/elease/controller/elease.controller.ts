@@ -35,6 +35,7 @@ export class ELeaseController {
     return await this.eleaseService.findById(id);
   }
 
+  // Contract
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseFilters(new PrismaExceptionValidationFilter())
@@ -50,12 +51,19 @@ export class ELeaseController {
     return await this.eleaseService.startContract(id);
   }
 
+  @Post('close/:id')
+  @HttpCode(HttpStatus.OK)
+  async closeContract(@Param('id') id: string): Promise<ELease> {
+    return this.eleaseService.closeContract(id);
+  }
+
   @Post('cancel/:id')
   @HttpCode(HttpStatus.OK)
   async cancelContract(@Param('id') id: string): Promise<ELease> {
     return await this.eleaseService.cancelContract(id);
   }
 
+  // Equipment
   @Put('add/:id')
   @HttpCode(HttpStatus.OK)
   async addEquipmentsToContract(
@@ -74,19 +82,13 @@ export class ELeaseController {
     return await this.eleaseService.removeEquipmentsToELease(id, equipmentsId);
   }
 
-  @Put('equipmentstatus/:id')
+  @Put('status/:id')
   @HttpCode(HttpStatus.OK)
   setUpdateStatusEquipment(
     @Param('id') id: string,
     @Body() equipmentsId: EquipmentsEditStatus,
   ): Promise<Equipment[]> {
     return this.eleaseService.setUpdateStatusEquipment(id, equipmentsId);
-  }
-
-  @Post('close/:id')
-  @HttpCode(HttpStatus.OK)
-  async closeContract(@Param('id') id: string): Promise<ELease> {
-    return this.eleaseService.closeContract(id);
   }
 
   @Put('replace/:id')
