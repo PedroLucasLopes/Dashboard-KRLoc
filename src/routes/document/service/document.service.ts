@@ -8,13 +8,13 @@ import { Response } from 'express';
 import { LeaseStatus } from 'generated/prisma/client';
 import { PrismaService } from 'src/global/prisma/prisma.service';
 import { FinantialReportDto } from '../dto/finantialReport.dto';
-import { FileService } from './file.service';
+import { FormatService } from './format.service';
 
 @Injectable()
 export class DocumentService {
   constructor(
     private prisma: PrismaService,
-    private file: FileService,
+    private file: FormatService,
   ) {}
 
   public async generateContract(id: string, res: Response): Promise<void> {

@@ -20,8 +20,8 @@ import { CreateEquipmentDto } from '../dto/createEquipment.dto';
 import { EditEquipmentDto } from '../dto/editEquipment.dto';
 import { FilterEquipmentDTO } from '../dto/filterequipment.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { FileSizeValidationPipe } from '../service/filevalidation.service';
 import { CsvImport } from 'src/global/types/csvImport';
+import { FileSizeValidationPipe } from 'src/routes/file/service/fileValidation.service';
 
 @Controller('/equipment')
 export class EquipmentController {
@@ -54,7 +54,8 @@ export class EquipmentController {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FileInterceptor('file'))
   async importCsv(
-    @UploadedFile(new FileSizeValidationPipe()) file: Express.Multer.File,
+    @UploadedFile(new FileSizeValidationPipe())
+    file: Express.Multer.File,
   ): Promise<CsvImport> {
     return await this.equipmentService.importCsv(file);
   }

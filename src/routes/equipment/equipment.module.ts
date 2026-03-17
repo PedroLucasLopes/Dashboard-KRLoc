@@ -2,16 +2,10 @@ import { Module } from '@nestjs/common';
 import { EquipmentService } from './service/equipment.service';
 import { EquipmentController } from './controller/equipment.controller';
 import { PrismaModule } from 'src/global/prisma/prisma.module';
-import { MulterModule } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { FileModule } from '../file/file.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    MulterModule.register({
-      storage: memoryStorage(),
-    }),
-  ],
+  imports: [PrismaModule, FileModule],
   controllers: [EquipmentController],
   providers: [EquipmentService],
 })

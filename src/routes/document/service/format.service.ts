@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
-
 import { Injectable } from '@nestjs/common';
 import {
   Document,
@@ -30,7 +28,7 @@ import { ELeaseById } from 'src/routes/elease/dto/eLeaseById.dto';
 import { ELease, LeaseItem } from 'generated/prisma/client';
 
 @Injectable()
-export class FileService {
+export class FormatService {
   constructor() {}
   async contract(data: ELeaseById): Promise<Buffer> {
     const lessee = data.lessee;
