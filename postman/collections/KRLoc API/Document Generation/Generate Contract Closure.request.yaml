@@ -1,0 +1,9 @@
+$kind: http-request
+name: Generate Contract Closure
+method: POST
+url: '{{base_url}}/generate/closure/:id'
+order: 3000
+pathVariables:
+  - key: id
+    value: '{{elease_id}}'
+    description: Contract UUID

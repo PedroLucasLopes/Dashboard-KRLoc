@@ -1,0 +1,26 @@
+$kind: http-request
+name: Get All Clients
+method: GET
+url: '{{base_url}}/client'
+order: 1000
+queryParams:
+  - key: page
+    value: '1'
+    description: Page number
+    disabled: true
+  - key: limit
+    value: '10'
+    description: Items per page
+    disabled: true
+  - key: order
+    value: asc
+    description: Sort order (asc or desc)
+    disabled: true
+  - key: name
+    value: ''
+    description: Filter by client name
+    disabled: true
+  - key: tax_id
+    value: ''
+    description: Filter by tax ID
+    disabled: true

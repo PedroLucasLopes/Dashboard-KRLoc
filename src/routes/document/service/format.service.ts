@@ -24,7 +24,7 @@ import * as path from 'path';
 import contractModel from '../utils/contract.json';
 import { labelValue, text12, text9 } from '../helper/textFormat.helper';
 import { ContractEquipment } from '../types/contractEquipment';
-import { ELeaseById } from 'src/routes/elease/dto/eLeaseById.dto';
+import { ELeaseById } from 'src/routes/elease/types/eLeaseById';
 import { ELease, LeaseItem } from 'generated/prisma/client';
 
 @Injectable()
@@ -36,8 +36,12 @@ export class FormatService {
     const { equipment, client, clientLessee, headers, paragraph } =
       contractModel as ContractEquipment;
 
-    const startDate = new Date(data.startDate).toLocaleString('pt-BR');
-    const endDate = new Date(data.endDate).toLocaleString('pt-BR');
+    const startDate = new Date(data.startDate).toLocaleDateString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+    });
+    const endDate = new Date(data.endDate).toLocaleDateString('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+    });
 
     const noBorders = {
       top: { style: BorderStyle.NONE, size: 0 },

@@ -1,4 +1,5 @@
 import {
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsPostalCode,
@@ -46,6 +47,10 @@ export class CreateLesseeDTO {
     message: 'The state has to be no longer 2 characters',
   })
   state?: string;
+
+  @IsInt()
+  @IsOptional()
+  number?: number;
 
   @IsString()
   @IsNotEmpty()

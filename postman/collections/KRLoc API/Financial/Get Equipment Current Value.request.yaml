@@ -1,0 +1,9 @@
+$kind: http-request
+name: Get Equipment Current Value
+method: GET
+url: '{{base_url}}/finantial/:id'
+order: 1000
+pathVariables:
+  - key: id
+    value: '{{equipment_id}}'
+    description: Equipment UUID

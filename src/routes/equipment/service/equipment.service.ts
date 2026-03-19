@@ -30,6 +30,19 @@ export class EquipmentService {
       ...(filter?.order && {
         orderBy: { suffix: filter.order },
       }),
+      include: {
+        equipmentAccessories: {
+          select: {
+            accessory: {
+              select: {
+                id: true,
+                name: true,
+                p_indemnity: true,
+              },
+            },
+          },
+        },
+      },
       skip: page,
       take: limit,
     });
@@ -44,6 +57,19 @@ export class EquipmentService {
   async findById(id: string): Promise<Equipment> {
     const equipment: Equipment | null = await this.prisma.equipment.findUnique({
       where: { id },
+      include: {
+        equipmentAccessories: {
+          select: {
+            accessory: {
+              select: {
+                id: true,
+                name: true,
+                p_indemnity: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!equipment) {

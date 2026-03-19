@@ -1,0 +1,19 @@
+$kind: http-request
+name: Generate Financial Report
+method: POST
+url: '{{base_url}}/generate/finantial/:id'
+order: 2000
+pathVariables:
+  - key: id
+    value: '{{elease_id}}'
+    description: Contract UUID
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "startDate": "2026-01-01",
+      "endDate": "2026-03-31"
+    }

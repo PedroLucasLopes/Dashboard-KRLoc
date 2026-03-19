@@ -1,0 +1,12 @@
+$kind: http-request
+name: Import Accessory CSV
+method: POST
+url: '{{base_url}}/accessory/upload'
+order: 4000
+body:
+  type: formdata
+  content:
+    - key: file
+      type: file
+      src: ''
+      description: CSV file containing accessory data

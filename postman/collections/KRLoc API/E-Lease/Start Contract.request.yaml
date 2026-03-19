@@ -1,0 +1,9 @@
+$kind: http-request
+name: Start Contract
+method: POST
+url: '{{base_url}}/elease/start/:id'
+order: 4000
+pathVariables:
+  - key: id
+    value: '{{elease_id}}'
+    description: Contract UUID

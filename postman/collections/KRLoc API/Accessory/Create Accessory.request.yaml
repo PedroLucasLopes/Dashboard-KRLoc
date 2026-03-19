@@ -1,0 +1,16 @@
+$kind: http-request
+name: Create Accessory
+method: POST
+url: '{{base_url}}/accessory'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Parafuso M8",
+      "quantity": 100,
+      "p_indemnity": 5.00
+    }

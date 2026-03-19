@@ -1,0 +1,15 @@
+$kind: http-request
+name: Associate Accessories to Equipment
+method: POST
+url: '{{base_url}}/accessory/associate'
+order: 5000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "equipmentId": "{{equipment_id}}",
+      "accessoryIds": ["{{accessory_id}}"]
+    }

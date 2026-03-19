@@ -17,9 +17,11 @@ import { FilterELeaseDto } from '../dto/filterELease.dto';
 import { PaginationConfig } from 'src/global/utils/pagination.utils';
 import { CreateELeaseDto } from '../dto/createELease.dto';
 import { CustomEquipmentInContract } from '../dto/customEquipmentInContract.dto';
-import { Equipment } from 'generated/prisma/browser';
+import { Equipment } from 'generated/prisma/client';
 import { EquipmentsEditStatus } from '../dto/equipmentsEditStatus.dto';
 import { ReplaceEquipmentDto } from '../dto/replaceEquipment.dto';
+import { LeaseItemAccessoryData } from '../types/leaseItemAccessoryData';
+import { EquipmentWithAccessories } from '../types/equipmentWithAccessories';
 
 @Injectable()
 export class ELeaseService {
@@ -57,6 +59,7 @@ export class ELeaseService {
           include: { client: true },
         },
         leaseItems: true,
+        leaseItemAccessories: true,
       },
       ...(filter?.order && {
         orderBy: { startDate: filter.order },
@@ -73,13 +76,14 @@ export class ELeaseService {
   }
 
   async findById(id: string): Promise<ELease> {
-    const foundELease = await this.prisma.eLease.findFirst({
+    const foundELease = await this.prisma.eLease.findUnique({
       where: { id },
       include: {
         lessee: {
           include: { client: true },
         },
         leaseItems: true,
+        leaseItemAccessories: true,
       },
     });
 
@@ -92,26 +96,52 @@ export class ELeaseService {
 
   async createELease(data: CreateELeaseDto): Promise<ELease> {
     const { equipments, ...leaseData } = data;
+    const equipmentsFound = await this.prisma.equipment.findMany({
+      where: {
+        id: { in: equipments },
+        status: StatusEquipment.AVAILABLE,
+      },
+      include: {
+        equipmentAccessories: {
+          include: {
+            accessory: {
+              select: {
+                id: true,
+                name: true,
+                p_indemnity: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const checkLesseeId = await this.prisma.lessee.findUnique({
+      where: { id: leaseData.lesseeId },
+    });
+
+    if (!checkLesseeId) {
+      throw new NotFoundException('This lessee do not exist');
+    }
+
+    if (equipmentsFound.length < equipments.length) {
+      throw new BadRequestException('Some equipments are not available');
+    }
+
+    const buildAccessoryData = (
+      equipmentsFound: EquipmentWithAccessories[],
+      contractId: string,
+    ): LeaseItemAccessoryData[] =>
+      equipmentsFound.flatMap(({ equipmentAccessories }) => {
+        return equipmentAccessories.map(({ accessoryId, accessory }) => ({
+          contractId,
+          accessoryId,
+          name: accessory.name,
+          p_indemnity: accessory.p_indemnity,
+        }));
+      });
+
     const createLease = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const equipmentsFound = await tx.equipment.findMany({
-          where: {
-            id: { in: equipments },
-            status: StatusEquipment.AVAILABLE,
-          },
-        });
-        const checkLesseeId = await tx.lessee.findFirst({
-          where: { id: leaseData.lesseeId },
-        });
-
-        if (!checkLesseeId) {
-          throw new NotFoundException('This lessee do not exist');
-        }
-
-        if (equipmentsFound.length < equipments.length) {
-          throw new BadRequestException('Some equipments are not available');
-        }
-
         if (checkLesseeId && equipmentsFound.length === equipments.length) {
           const createLease = await tx.eLease.create({
             data: {
@@ -170,6 +200,12 @@ export class ELeaseService {
             })),
           });
 
+          if (buildAccessoryData.length > 0) {
+            await tx.leaseItemAccessory.createMany({
+              data: buildAccessoryData(equipmentsFound, createLease.id),
+            });
+          }
+
           return createLease;
         }
       },
@@ -185,7 +221,7 @@ export class ELeaseService {
   async startContract(id: string): Promise<ELease> {
     const startContract = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const lease = await tx.eLease.findFirst({
+        const lease = await tx.eLease.findUnique({
           where: {
             id,
             status: LeaseStatus.PENDING,
@@ -271,7 +307,7 @@ export class ELeaseService {
   async cancelContract(id: string): Promise<ELease> {
     const cancelContract = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const checkContract = await tx.eLease.findFirst({
+        const checkContract = await tx.eLease.findUnique({
           where: {
             id,
             status: LeaseStatus.PENDING,
@@ -360,7 +396,7 @@ export class ELeaseService {
   ): Promise<ELease> {
     const addEquipments = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const checkContract = await tx.eLease.findFirst({
+        const checkContract = await tx.eLease.findUnique({
           where: {
             id,
             status: LeaseStatus.PENDING,
@@ -456,7 +492,7 @@ export class ELeaseService {
   ): Promise<ELease> {
     const removeEquipments = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const contractExist = await tx.eLease.findFirst({
+        const contractExist = await tx.eLease.findUnique({
           where: {
             id,
             status: LeaseStatus.PENDING,
@@ -579,45 +615,43 @@ export class ELeaseService {
     equipmentsId: CustomEquipmentInContract,
     status: StatusEquipment,
   ): Promise<Equipment[]> {
+    const { equipments } = equipmentsId;
+    const contractExist = await this.prisma.eLease.findUnique({
+      where: { id, status: LeaseStatus.ACTIVE },
+      include: {
+        equipments: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        lessee: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!contractExist) {
+      throw new NotFoundException('Contract not found');
+    }
+
+    const equipmentsFound = await this.prisma.equipment.findMany({
+      where: {
+        id: { in: equipments },
+        status: StatusEquipment.LEASED,
+      },
+    });
+
+    if (equipmentsFound.length < equipments.length) {
+      throw new BadRequestException(
+        'Some equipments are not available to change',
+      );
+    }
+
     const updateEquipmentStatus = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const { equipments } = equipmentsId;
-        const contractExist = await tx.eLease.findFirst({
-          where: { id, status: LeaseStatus.ACTIVE },
-          include: {
-            equipments: {
-              select: {
-                id: true,
-                status: true,
-              },
-            },
-            lessee: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        });
-
-        if (!contractExist) {
-          throw new NotFoundException('Contract not found');
-        }
-
-        const equipmentsFound = await tx.equipment.findMany({
-          where: {
-            id: { in: equipments },
-            status: StatusEquipment.LEASED,
-          },
-        });
-
-        console.log({ equipments, equipmentsFound, status });
-
-        if (equipmentsFound.length < equipments.length) {
-          throw new BadRequestException(
-            'Some equipments are not available to change',
-          );
-        }
-
         if (contractExist && equipmentsFound.length === equipments.length) {
           const keepELeaseId: StatusEquipment[] = [
             StatusEquipment.STOLEN,
@@ -681,8 +715,7 @@ export class ELeaseService {
   ): Promise<ELease> {
     const { replacements } = body;
 
-    // 1. Busca o contrato ativo
-    const contract = await this.prisma.eLease.findFirst({
+    const contract = await this.prisma.eLease.findUnique({
       where: { id: contractId, status: LeaseStatus.ACTIVE },
       include: { lessee: { select: { name: true } } },
     });
@@ -729,9 +762,29 @@ export class ELeaseService {
           id: { in: oldIds },
           status: { in: [StatusEquipment.MAINTENANCE, StatusEquipment.STOLEN] },
         },
+        include: {
+          equipmentAccessories: {
+            select: {
+              accessoryId: true,
+            },
+          },
+        },
       }),
       this.prisma.equipment.findMany({
         where: { id: { in: newIds }, status: StatusEquipment.AVAILABLE },
+        include: {
+          equipmentAccessories: {
+            select: {
+              accessory: {
+                select: {
+                  id: true,
+                  name: true,
+                  p_indemnity: true,
+                },
+              },
+            },
+          },
+        },
       }),
     ]);
 
@@ -774,6 +827,12 @@ export class ELeaseService {
         throw new BadRequestException(
           `New equipment ${newEq.code}-${newEq.suffix} must have a different suffix from the old one`,
         );
+      }
+
+      if (
+        newEq.equipmentAccessories.length !== oldEq.equipmentAccessories.length
+      ) {
+        throw new BadRequestException('Some accessories are missing');
       }
     }
 
@@ -827,6 +886,20 @@ export class ELeaseService {
             }),
           }),
 
+          tx.leaseItemAccessory.createMany({
+            data: replacements.flatMap(({ newEquipmentId }) => {
+              const newAccessories =
+                newEquipmentMap.get(newEquipmentId)!.equipmentAccessories;
+
+              return newAccessories.map(({ accessory }) => ({
+                contractId,
+                accessoryId: accessory.id,
+                name: accessory.name,
+                p_indemnity: accessory.p_indemnity,
+              }));
+            }),
+          }),
+
           tx.auditLog.create({
             data: {
               contractId,
@@ -862,7 +935,7 @@ export class ELeaseService {
           }),
         ]);
 
-        return tx.eLease.findFirst({
+        return tx.eLease.findUnique({
           where: { id: contractId },
           include: { leaseItems: true, lessee: true },
         });
@@ -879,7 +952,7 @@ export class ELeaseService {
   async closeContract(id: string): Promise<ELease> {
     const closeContract = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const findContract = await tx.eLease.findFirst({
+        const findContract = await tx.eLease.findUnique({
           where: {
             id,
             status: LeaseStatus.ACTIVE,

@@ -1,0 +1,9 @@
+$kind: http-request
+name: Delete Equipment
+method: DELETE
+url: '{{base_url}}/equipment/:id'
+order: 6000
+pathVariables:
+  - key: id
+    value: '{{equipment_id}}'
+    description: Equipment UUID

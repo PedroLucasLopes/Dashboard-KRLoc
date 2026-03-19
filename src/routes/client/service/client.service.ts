@@ -35,6 +35,9 @@ export class ClientService {
       ...(filter?.order && {
         orderBy: { name: filter.order },
       }),
+      include: {
+        lessees: true,
+      },
       skip: page,
       take: limit,
     });

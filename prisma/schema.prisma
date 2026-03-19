@@ -31,11 +31,12 @@ model Equipment {
 }
 
 model Accessory {
-  id          String               @id @default(uuid())
-  name        String
-  quantity    Int
-  p_indemnity Float
-  equipments  EquipmentAccessory[]
+  id                   String               @id @default(uuid())
+  name                 String
+  quantity             Int
+  p_indemnity          Float
+  equipments           EquipmentAccessory[]
+  leaseItemAccessories LeaseItemAccessory[]
 }
 
 model EquipmentAccessory {
@@ -85,19 +86,20 @@ model Lessee {
 }
 
 model ELease {
-  id                 String      @id @default(uuid())
-  lesseeId           String
-  startDate          DateTime
-  endDate            DateTime
-  finishDate         DateTime?
-  status             LeaseStatus @default(PENDING)
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  contract_generated DateTime?
-  auditLogs          AuditLog[]
-  lessee             Lessee      @relation(fields: [lesseeId], references: [id])
-  equipments         Equipment[]
-  leaseItems         LeaseItem[]
+  id                   String               @id @default(uuid())
+  lesseeId             String
+  startDate            DateTime
+  endDate              DateTime
+  finishDate           DateTime?
+  status               LeaseStatus          @default(PENDING)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  contract_generated   DateTime?
+  auditLogs            AuditLog[]
+  lessee               Lessee               @relation(fields: [lesseeId], references: [id])
+  equipments           Equipment[]
+  leaseItems           LeaseItem[]
+  leaseItemAccessories LeaseItemAccessory[]
 }
 
 model LeaseItem {
@@ -124,6 +126,18 @@ model LeaseItem {
   @@unique([contractId, equipmentId])
   @@index([contractId])
   @@index([equipmentId])
+}
+
+model LeaseItemAccessory {
+  id          String    @id @default(uuid())
+  name        String
+  p_indemnity Float
+  accessoryId String
+  contractId  String
+  accessory   Accessory @relation(fields: [accessoryId], references: [id])
+  contract    ELease    @relation(fields: [contractId], references: [id])
+
+  @@index([accessoryId])
 }
 
 model AuditLog {

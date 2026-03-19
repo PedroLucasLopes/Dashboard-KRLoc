@@ -1,0 +1,20 @@
+$kind: http-request
+name: Update Equipment
+method: PUT
+url: '{{base_url}}/equipment/:id'
+order: 5000
+pathVariables:
+  - key: id
+    value: '{{equipment_id}}'
+    description: Equipment UUID
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Andaime Tubular Atualizado",
+      "p_diary": 30.00,
+      "status": "AVAILABLE"
+    }

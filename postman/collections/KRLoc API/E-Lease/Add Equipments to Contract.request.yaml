@@ -1,0 +1,18 @@
+$kind: http-request
+name: Add Equipments to Contract
+method: PUT
+url: '{{base_url}}/elease/add/:id'
+order: 7000
+pathVariables:
+  - key: id
+    value: '{{elease_id}}'
+    description: Contract UUID
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "equipments": ["{{equipment_id}}"]
+    }

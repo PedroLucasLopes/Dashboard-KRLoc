@@ -4,13 +4,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Accessory } from 'generated/prisma/client';
+import { Accessory, Prisma, StatusEquipment } from 'generated/prisma/client';
 import { PrismaService } from 'src/global/prisma/prisma.service';
 import { PaginationConfig } from 'src/global/utils/pagination.utils';
 import { FilterAccessory } from '../dto/filterAccessory.dto';
-import csv from 'csv-parser';
 import { Readable } from 'stream';
 import { CsvImport } from 'src/global/types/csvImport';
+import { CreateAccessory } from '../dto/createAccessory.dto';
+import { EditAccessory } from '../dto/editAccessory.dto';
+import csv from 'csv-parser';
+import { AssociateEquipmentAccessory } from '../dto/associateEquipmentAccessory.dto';
+import { EquipmentAccessoryCreated } from '../dto/equipmentAccessoryCreated.dto';
 
 @Injectable()
 export class AccessoryService {
@@ -48,7 +52,7 @@ export class AccessoryService {
     return accessory;
   }
 
-  public async createAccessory(data: Accessory): Promise<Accessory> {
+  public async createAccessory(data: CreateAccessory): Promise<Accessory> {
     const createAccessory = await this.prisma.accessory.create({ data });
     return createAccessory;
   }
@@ -116,9 +120,67 @@ export class AccessoryService {
     };
   }
 
+  public async associateEquipmentsToAccessory(
+    data: AssociateEquipmentAccessory,
+  ): Promise<EquipmentAccessoryCreated> {
+    const [equipment, accessories] = await Promise.all([
+      this.prisma.equipment.findMany({
+        where: {
+          id: data.equipmentId,
+          status: StatusEquipment.AVAILABLE,
+        },
+      }),
+
+      this.prisma.accessory.findMany({
+        where: {
+          id: { in: data.accessoryIds },
+          quantity: { gt: 0 },
+        },
+      }),
+    ]);
+
+    if (!equipment) {
+      throw new NotFoundException('Equipment not found');
+    }
+
+    if (accessories.length < data.accessoryIds.length) {
+      throw new BadRequestException('Some accessories are not available');
+    }
+
+    const createEquipmentAccessory = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const [, createAssociation] = await Promise.all([
+          tx.accessory.updateMany({
+            where: { id: { in: data.accessoryIds }, quantity: { gt: 0 } },
+            data: {
+              quantity: { decrement: 1 },
+            },
+          }),
+
+          tx.equipmentAccessory.createMany({
+            data: data.accessoryIds.map((ids) => ({
+              equipmentId: data.equipmentId,
+              accessoryId: ids,
+            })),
+          }),
+        ]);
+
+        return createAssociation;
+      },
+    );
+
+    const totalInserted = createEquipmentAccessory.count;
+
+    return {
+      message: 'Association created successfully',
+      registers: totalInserted,
+      statusCode: HttpStatus.CREATED,
+    };
+  }
+
   public async updateAccessory(
     id: string,
-    data: Accessory,
+    data: EditAccessory,
   ): Promise<Accessory> {
     const findAccessory = await this.prisma.accessory.findUnique({
       where: { id },
@@ -128,7 +190,7 @@ export class AccessoryService {
       throw new NotFoundException('Accessory not found');
     }
 
-    if (data.quantity < findAccessory.quantity) {
+    if (data.quantity !== undefined && findAccessory.quantity > data.quantity) {
       throw new BadRequestException(
         'You cant change quantity to less than you already have',
       );
@@ -162,7 +224,7 @@ export class AccessoryService {
       await this.prisma.accessory.update({
         where: { id },
         data: {
-          quantity: findAccessory.quantity - 1,
+          quantity: { decrement: 1 },
         },
       });
 

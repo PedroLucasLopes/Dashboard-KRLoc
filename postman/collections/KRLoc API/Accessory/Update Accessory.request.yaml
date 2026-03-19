@@ -1,0 +1,20 @@
+$kind: http-request
+name: Update Accessory
+method: PUT
+url: '{{base_url}}/accessory/:id'
+order: 6000
+pathVariables:
+  - key: id
+    value: '{{accessory_id}}'
+    description: Accessory UUID
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Parafuso M8 Atualizado",
+      "quantity": 200,
+      "p_indemnity": 6.00
+    }

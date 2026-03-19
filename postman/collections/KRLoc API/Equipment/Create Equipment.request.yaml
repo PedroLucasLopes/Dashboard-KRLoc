@@ -1,0 +1,21 @@
+$kind: http-request
+name: Create Equipment
+method: POST
+url: '{{base_url}}/equipment'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Andaime Tubular",
+      "code": "AND-001",
+      "p_diary": 25.00,
+      "p_weekly": 150.00,
+      "p_biweekly": 280.00,
+      "p_monthly": 500.00,
+      "p_indemnity": 1200.00,
+      "status": "AVAILABLE"
+    }

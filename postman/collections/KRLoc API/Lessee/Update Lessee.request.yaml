@@ -1,0 +1,20 @@
+$kind: http-request
+name: Update Lessee
+method: PUT
+url: '{{base_url}}/lessee/:id'
+order: 5000
+pathVariables:
+  - key: id
+    value: '{{lessee_id}}'
+    description: Lessee UUID
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "João da Silva Atualizado",
+      "address": "Rua Nova, 789",
+      "city": "Campinas"
+    }

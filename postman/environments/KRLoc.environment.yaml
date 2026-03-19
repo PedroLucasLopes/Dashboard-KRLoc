@@ -1,0 +1,30 @@
+name: KRLoc
+values:
+  - key: base_url
+    value: 'http://localhost:3000/api'
+    enabled: true
+    type: default
+  - key: client_id
+    value: ''
+    enabled: true
+    type: default
+  - key: lessee_id
+    value: ''
+    enabled: true
+    type: default
+  - key: equipment_id
+    value: ''
+    enabled: true
+    type: default
+  - key: accessory_id
+    value: ''
+    enabled: true
+    type: default
+  - key: elease_id
+    value: ''
+    enabled: true
+    type: default
+  - key: new_equipment_id
+    value: ''
+    enabled: true
+    type: default

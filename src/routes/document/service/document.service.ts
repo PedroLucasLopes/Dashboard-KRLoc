@@ -18,7 +18,7 @@ export class DocumentService {
   ) {}
 
   public async generateContract(id: string, res: Response): Promise<void> {
-    const contract = await this.prisma.eLease.findFirst({
+    const contract = await this.prisma.eLease.findUnique({
       where: { id, status: LeaseStatus.PENDING },
       include: {
         leaseItems: true,
@@ -70,7 +70,7 @@ export class DocumentService {
       `${new Date(endDate).toISOString().split('T')[0]}T23:59:59.999Z`,
     );
 
-    const contract = await this.prisma.eLease.findFirst({
+    const contract = await this.prisma.eLease.findUnique({
       where: { id, status: LeaseStatus.ACTIVE },
       include: {
         lessee: {
@@ -122,7 +122,7 @@ export class DocumentService {
     id: string,
     res: Response,
   ): Promise<void> {
-    const contract = await this.prisma.eLease.findFirst({
+    const contract = await this.prisma.eLease.findUnique({
       where: { id, status: LeaseStatus.COMPLETED },
       include: {
         leaseItems: true,

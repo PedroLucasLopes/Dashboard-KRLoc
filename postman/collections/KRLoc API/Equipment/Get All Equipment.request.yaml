@@ -1,0 +1,30 @@
+$kind: http-request
+name: Get All Equipment
+method: GET
+url: '{{base_url}}/equipment'
+order: 1000
+queryParams:
+  - key: page
+    value: '1'
+    description: Page number
+    disabled: true
+  - key: limit
+    value: '10'
+    description: Items per page
+    disabled: true
+  - key: order
+    value: asc
+    description: Sort order (asc or desc)
+    disabled: true
+  - key: name
+    value: ''
+    description: Filter by equipment name
+    disabled: true
+  - key: code
+    value: ''
+    description: Filter by equipment code
+    disabled: true
+  - key: status
+    value: AVAILABLE
+    description: 'Filter by status (AVAILABLE, STOLEN, MAINTENANCE)'
+    disabled: true

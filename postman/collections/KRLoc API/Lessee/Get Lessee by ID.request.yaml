@@ -1,0 +1,9 @@
+$kind: http-request
+name: Get Lessee by ID
+method: GET
+url: '{{base_url}}/lessee/:id'
+order: 2000
+pathVariables:
+  - key: id
+    value: '{{lessee_id}}'
+    description: Lessee UUID
