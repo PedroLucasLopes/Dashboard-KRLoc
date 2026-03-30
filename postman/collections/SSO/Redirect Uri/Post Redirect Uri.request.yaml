@@ -1,0 +1,16 @@
+$kind: http-request
+name: Post Redirect Uri
+url: "{{base_url}}/redirecturi"
+method: POST
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+body:
+  type: json
+  content: "{\r
+
+    \    \"redirectUri\": \"http://localhost:3000/login\",\r
+
+    \    \"projectId\": \"0589e0cc-90d9-4cba-ab1b-30110e52327e\"\r
+
+    }"
+order: 1774545842017

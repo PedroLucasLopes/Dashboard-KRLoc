@@ -1,22 +1,9 @@
 $kind: http-request
 name: Get All Accessories
 method: GET
-url: '{{base_url}}/accessory'
+url: "{{base_url}}/accessory"
+auth:
+  type: oauth2
+  credentials:
+    addTokenTo: header
 order: 1000
-queryParams:
-  - key: page
-    value: '1'
-    description: Page number
-    disabled: true
-  - key: limit
-    value: '10'
-    description: Items per page
-    disabled: true
-  - key: order
-    value: asc
-    description: Sort order (asc or desc)
-    disabled: true
-  - key: name
-    value: ''
-    description: Filter by accessory name
-    disabled: true

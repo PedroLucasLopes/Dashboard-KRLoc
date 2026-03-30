@@ -1,0 +1,16 @@
+$kind: http-request
+name: Create Role
+url: "{{base_url}}/role"
+method: POST
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+body:
+  type: json
+  content: "{\r
+
+    \    \"name\": \"example\",\r
+
+    \    \"projectId\": \"123\"\r
+
+    }"
+order: 2963584496521273

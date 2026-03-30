@@ -1,0 +1,7 @@
+$kind: http-request
+name: Delete Project
+url: "{{base_url}}/project/{{id}}"
+method: DELETE
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+order: 4285552878885562

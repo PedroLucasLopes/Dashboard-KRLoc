@@ -1,0 +1,7 @@
+$kind: http-request
+name: Get Project By Id
+url: "{{base_url}}/project/{{id}}"
+method: GET
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+order: 845391261792054

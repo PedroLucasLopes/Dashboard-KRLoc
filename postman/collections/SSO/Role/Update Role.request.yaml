@@ -1,0 +1,7 @@
+$kind: http-request
+name: Update Role
+url: "{{base_url}}/role/{{id}}"
+method: PUT
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+order: 3981812224320452

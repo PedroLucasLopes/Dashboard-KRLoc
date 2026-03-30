@@ -1,0 +1,7 @@
+$kind: http-request
+name: Get All Role
+url: "{{base_url}}/role"
+method: GET
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+order: 1774306788540

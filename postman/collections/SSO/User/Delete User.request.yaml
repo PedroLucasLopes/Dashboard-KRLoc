@@ -1,0 +1,8 @@
+$kind: http-request
+name: Delete User
+url: "{{base_url}}/user/{{id}}"
+method: DELETE
+headers:
+  - key: x-sso-secret
+    value: "{{x-sso-secret}}"
+order: 4285552878885562

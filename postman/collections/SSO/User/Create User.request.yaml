@@ -1,0 +1,16 @@
+$kind: http-request
+name: Create User
+url: "{{base_url}}/user"
+method: POST
+headers:
+  x-sso-secret: "{{x-sso-secret}}"
+body:
+  type: json
+  content: "{\r
+
+    \    \"name\": \"example\",\r
+
+    \    \"email\": \"example@example.com\"\r
+
+    }"
+order: 2963584496521273
