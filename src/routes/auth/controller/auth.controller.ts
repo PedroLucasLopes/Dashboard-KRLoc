@@ -3,16 +3,21 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Post,
   Query,
   Req,
   Res,
 } from '@nestjs/common';
 import { AuthService } from '../service/auth.service';
 import { Request, Response } from 'express';
+import { RedisService } from 'src/global/redis/service/redis.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private redis: RedisService,
+  ) {}
 
   @Get('callback')
   @HttpCode(HttpStatus.OK)
@@ -23,5 +28,12 @@ export class AuthController {
     @Query('state') state: string,
   ) {
     return await this.authService.getToken(req, res, code, state);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(@Req() req: Request, @Res() res: Response): Promise<void> {
+    await this.redis.deleteJwtSession(req.cookies.session_id as string);
+    res.clearCookie('session_id');
   }
 }

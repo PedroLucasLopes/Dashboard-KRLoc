@@ -6,43 +6,46 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NextFunction, Response, Request } from 'express';
-import { JwtPayloadAuth } from '../dto/jwtPayloadAuth.dto';
-import * as jwt from 'jsonwebtoken';
+import { RedisService } from '../redis/service/redis.service';
 
 @Injectable()
 export class JwtAuthMiddleware implements NestMiddleware {
   private readonly clientId: string;
-  private readonly jwtSecret: string;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private redis: RedisService,
+  ) {
     this.clientId = config.getOrThrow('APP_CLIENT_ID');
-    this.jwtSecret = config.getOrThrow('JWT_SECRET');
   }
 
-  use(req: Request, res: Response, next: NextFunction) {
-    const token = req.cookies?.access_token as string;
+  async use(req: Request, res: Response, next: NextFunction) {
+    const token = await this.redis.getJwtSession(
+      req.cookies.session_id as string,
+    );
 
-    if (!token) return next();
+    const noValidSession = !token || !req.cookies.session_id;
+    const tokenExpired = token && token.exp * 1000 < Date.now();
 
-    const decoded = jwt.verify(token, this.jwtSecret);
-    const payload = decoded as JwtPayloadAuth;
-
-    if (typeof decoded === 'string' || !decoded) {
-      throw new UnauthorizedException('Invalid token');
-    }
-
-    if (decoded instanceof jwt.TokenExpiredError) {
-      res.clearCookie('access_token');
+    if (tokenExpired || noValidSession) {
+      await this.redis.deleteJwtSession(req.cookies.session_id as string);
+      res.clearCookie('session_id');
       return next();
     }
 
-    if (payload.clientId !== this.clientId) {
+    if (token.clientId !== this.clientId) {
       throw new UnauthorizedException('Token issued for a different client');
     }
 
-    const hasPermission = payload.permissions.some(
+    if (token && req.path === '/api/auth/logout') {
+      await this.redis.deleteJwtSession(req.cookies.session_id as string);
+      res.clearCookie('session_id');
+      res.redirect('/api/login');
+    }
+
+    const hasPermission = token.permissions.some(
       (p) =>
-        this.matchPath(p.path, req.path) &&
+        this.matchPath(req.path, p.path) &&
         p.method === req.method.toUpperCase(),
     );
 
@@ -52,14 +55,11 @@ export class JwtAuthMiddleware implements NestMiddleware {
       );
     }
 
-    req.user = payload;
     next();
   }
 
   private matchPath(pattern: string, actual: string): boolean {
-    const regexStr = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/:[\w]+/g, '[^/]+');
+    const regexStr = pattern.replace(/\/api/g, '');
 
     return new RegExp(`^${regexStr}$`).test(actual);
   }

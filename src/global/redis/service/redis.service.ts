@@ -5,39 +5,56 @@ import { JwtPayloadAuth } from 'src/global/dto/jwtPayloadAuth.dto';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private client: Redis;
+  private redis: Redis;
   constructor(private config: ConfigService) {}
+
   onModuleInit() {
-    this.client = new Redis({
-      host: this.config.getOrThrow('REDIS_HOST', 'localhost'),
-      port: this.config.getOrThrow('REDIS_PORT', 6379),
-      password: this.config.get('REDIS_PASSWORD'),
+    this.redis = new Redis({
+      host: this.config.get<string>('REDIS_HOST', 'localhost'),
+      port: this.config.get<number>('REDIS_PORT', 6379),
+      password: this.config.get<string>('REDIS_PASSWORD'),
     });
   }
+
   async onModuleDestroy() {
-    await this.client.quit();
+    await this.redis.quit();
   }
 
-  async setJwtSession(
-    access_token: string,
-    data: JwtPayloadAuth,
+  async setPkceSession(
+    state: string,
+    data: { pkce_state: string; pkce_verifier: string },
   ): Promise<void> {
-    await this.client.set(
-      `access_token_app:${access_token}`,
+    await this.redis.set(`pkce_app:${state}`, JSON.stringify(data), 'EX', 300);
+  }
+
+  async getPkceSession(
+    state: string,
+  ): Promise<{ pkce_state: string; pkce_verifier: string } | null> {
+    const raw = (await this.redis.get(`pkce_app:${state}`)) as string;
+    if (!raw) return null;
+    return JSON.parse(raw) as { pkce_state: string; pkce_verifier: string };
+  }
+
+  async deletePkceSession(state: string): Promise<void> {
+    await this.redis.del(`pkce_app:${state}`);
+  }
+
+  async setJwtSession(token: string, data: JwtPayloadAuth): Promise<void> {
+    await this.redis.set(
+      `jwt_app:${token}`,
       JSON.stringify(data),
       'EX',
       data.exp,
     );
   }
 
-  async getJwtSession(access_token: string): Promise<JwtPayloadAuth | null> {
-    const raw = (await this.client.get(
-      `access_token_app:${access_token}`,
-    )) as string;
-    return (JSON.parse(raw) as JwtPayloadAuth) ?? null;
+  async getJwtSession(token: string): Promise<JwtPayloadAuth | null> {
+    const raw = (await this.redis.get(`jwt_app:${token}`)) as string;
+    if (!raw) return null;
+    return JSON.parse(raw) as JwtPayloadAuth;
   }
 
-  async deleteJwtSession(access_token: string): Promise<void> {
-    await this.client.del(`access_token_app:${access_token}`);
+  async deleteJwtSession(token: string): Promise<void> {
+    await this.redis.del(`jwt_app:${token}`);
   }
 }

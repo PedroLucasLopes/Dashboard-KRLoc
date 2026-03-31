@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import * as crypto from 'node:crypto';
+import { RedisService } from '../redis/service/redis.service';
 
 @Injectable()
 export class SsoAuthGuard implements CanActivate {
@@ -9,33 +10,34 @@ export class SsoAuthGuard implements CanActivate {
   private readonly clientId: string;
   private readonly redirectUri: string;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private redis: RedisService,
+  ) {
     this.ssoAuthorizeUrl = config.getOrThrow('SSO_AUTHORIZE_URL');
     this.clientId = config.getOrThrow('APP_CLIENT_ID');
     this.redirectUri = config.getOrThrow('SSO_REDIRECT_URI');
   }
 
-  canActivate(context: ExecutionContext): boolean {
+  canActivate(context: ExecutionContext): Promise<boolean> | boolean {
     const req = context.switchToHttp().getRequest<Request>();
     const res = context.switchToHttp().getResponse<Response>();
 
-    const token = this.extractToken(req);
+    if (!req.cookies.session_id) {
+      return this.validateAccess(req, res);
+    }
 
-    if (token) return true;
+    return true;
+  }
 
+  private async validateAccess(req: Request, res: Response): Promise<boolean> {
     if (req.path === '/api/auth/callback') return true;
 
-    this.redirectToSso(req, res);
+    await this.redirectToSso(req, res);
     return false;
   }
 
-  private extractToken(req: Request): string | undefined {
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
-    return req.cookies?.access_token as string | undefined;
-  }
-
-  private redirectToSso(req: Request, res: Response): void {
+  private async redirectToSso(req: Request, res: Response): Promise<void> {
     const verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto
       .createHash('sha256')
@@ -44,14 +46,15 @@ export class SsoAuthGuard implements CanActivate {
 
     const statePayload = {
       csrf: crypto.randomBytes(16).toString('hex'),
-      returnTo: req.originalUrl,
     };
     const state = Buffer.from(JSON.stringify(statePayload)).toString(
       'base64url',
     );
 
-    res.cookie('pkce_verifier', verifier, { httpOnly: true, sameSite: 'lax' });
-    res.cookie('pkce_state', state, { httpOnly: true, sameSite: 'lax' });
+    await this.redis.setPkceSession(state, {
+      pkce_state: state,
+      pkce_verifier: verifier,
+    });
 
     const url = new URL(this.ssoAuthorizeUrl);
     url.searchParams.set('client_id', this.clientId);

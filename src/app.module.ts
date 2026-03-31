@@ -24,10 +24,12 @@ import { DocumentModule } from './routes/document/document.module';
 import { FinantialModule } from './routes/finantial/finantial.module';
 import { AccessoryModule } from './routes/accessory/accessory.module';
 import { AuthModule } from './routes/auth/auth.module';
+import { RedisModule } from './global/redis/redis.module';
 @Module({
   imports: [
     HttpModule,
     PrismaModule,
+    RedisModule,
     EquipmentModule,
     ConfigModule,
     ClientModule,

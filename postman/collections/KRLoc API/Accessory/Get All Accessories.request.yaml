@@ -6,4 +6,9 @@ auth:
   type: oauth2
   credentials:
     addTokenTo: header
+    grant_type: implicit
+    useBrowser: true
+    tokenName: access_token
+    scope: email:profile
+    clientId: "{{app_client_id}}"
 order: 1000
