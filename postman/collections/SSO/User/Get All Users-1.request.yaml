@@ -1,9 +1,0 @@
-$kind: http-request
-name: Get All Users
-url: "{{base_url}}/user"
-method: GET
-headers:
-  - key: x-sso-secret
-    value: "{{x-sso-secret}}"
-    disabled: true
-order: 1774306788540

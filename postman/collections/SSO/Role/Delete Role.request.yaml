@@ -1,7 +1,0 @@
-$kind: http-request
-name: Delete Role
-url: "{{base_url}}/role/{{id}}"
-method: DELETE
-headers:
-  x-sso-secret: "{{x-sso-secret}}"
-order: 4285552878885562

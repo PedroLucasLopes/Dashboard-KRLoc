@@ -1,9 +1,0 @@
-$kind: http-request
-name: Delete Lessee
-method: DELETE
-url: '{{base_url}}/lessee/:id'
-order: 6000
-pathVariables:
-  - key: id
-    value: '{{lessee_id}}'
-    description: Lessee UUID

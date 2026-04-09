@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import * as crypto from 'node:crypto';
 import { RedisService } from '../redis/service/redis.service';
+import { Reflector } from '@nestjs/core';
 
 @Injectable()
 export class SsoAuthGuard implements CanActivate {
@@ -11,28 +12,52 @@ export class SsoAuthGuard implements CanActivate {
   private readonly redirectUri: string;
 
   constructor(
+    private reflector: Reflector,
     private config: ConfigService,
     private redis: RedisService,
   ) {
-    this.ssoAuthorizeUrl = config.getOrThrow('SSO_AUTHORIZE_URL');
+    this.ssoAuthorizeUrl = config.getOrThrow('SSO_BASE_URL');
     this.clientId = config.getOrThrow('APP_CLIENT_ID');
-    this.redirectUri = config.getOrThrow('SSO_REDIRECT_URI');
+    this.redirectUri = config.getOrThrow('APP_BASE_URL');
   }
 
   canActivate(context: ExecutionContext): Promise<boolean> | boolean {
     const req = context.switchToHttp().getRequest<Request>();
     const res = context.switchToHttp().getResponse<Response>();
 
-    if (!req.cookies.session_id) {
-      return this.validateAccess(req, res);
+    const isLogin = this.reflector.getAllAndOverride<boolean>('isLogin', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (!isLogin) return true;
+
+    const sessionId = req.cookies.session_id as string;
+
+    if (sessionId)
+      return this.validateSessionAlreadyExists(sessionId, req, res);
+
+    return this.validateAccess(req, res);
+  }
+
+  private async validateSessionAlreadyExists(
+    sessionId: string,
+    req: Request,
+    res: Response,
+  ): Promise<boolean> {
+    const token = await this.redis.getJwtSession(sessionId);
+
+    if (token && token.exp * 1000 > Date.now()) {
+      res.redirect(`${this.redirectUri}/home`);
+      return false;
     }
 
-    return true;
+    await this.redis.deleteJwtSession(sessionId);
+    res.clearCookie('session_id');
+    return this.validateAccess(req, res);
   }
 
   private async validateAccess(req: Request, res: Response): Promise<boolean> {
-    if (req.path === '/api/auth/callback') return true;
-
     await this.redirectToSso(req, res);
     return false;
   }
@@ -56,9 +81,9 @@ export class SsoAuthGuard implements CanActivate {
       pkce_verifier: verifier,
     });
 
-    const url = new URL(this.ssoAuthorizeUrl);
+    const url = new URL(`${this.ssoAuthorizeUrl}/authorize`);
     url.searchParams.set('client_id', this.clientId);
-    url.searchParams.set('redirect_uri', this.redirectUri);
+    url.searchParams.set('redirect_uri', `${this.redirectUri}/auth/callback`);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('code_challenge', challenge);
     url.searchParams.set('code_challenge_method', 'S256');

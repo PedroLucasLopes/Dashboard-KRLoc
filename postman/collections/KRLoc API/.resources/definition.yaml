@@ -1,9 +1,0 @@
-$kind: collection
-name: KRLoc API
-description: |-
-  Comprehensive collection for the KRLoc rental management NestJS API.
-  Covers all modules: Client, Lessee, Equipment, Accessory, E-Lease (Contracts), Financial, and Document Generation.
-variables:
-  - key: base_url
-    value: 'http://localhost:3000/api'
-    description: Base URL for the KRLoc API

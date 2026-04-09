@@ -1,9 +1,0 @@
-$kind: http-request
-name: Cancel Contract
-method: POST
-url: '{{base_url}}/elease/cancel/:id'
-order: 6000
-pathVariables:
-  - key: id
-    value: '{{elease_id}}'
-    description: Contract UUID

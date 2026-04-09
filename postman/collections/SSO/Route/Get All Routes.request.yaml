@@ -1,7 +1,0 @@
-$kind: http-request
-name: Get All Routes
-url: "{{base_url}}/route"
-method: GET
-headers:
-  x-sso-secret: "{{x-sso-secret}}"
-order: 1774306788540

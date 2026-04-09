@@ -1,9 +1,4 @@
-import {
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  RequestMethod,
-} from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -13,7 +8,6 @@ import { AppService } from './app.service';
 
 import { PrismaModule } from './global/prisma/prisma.module';
 import { PrismaExceptionFilter } from './global/error/prismaclientknownerror.exception';
-import { JwtAuthMiddleware } from './global/middleware/jwtAuth.middleware';
 import { SsoAuthGuard } from './global/guard/ssoAuthGuard.guard';
 
 import { EquipmentModule } from './routes/equipment/equipment.module';
@@ -25,6 +19,7 @@ import { FinantialModule } from './routes/finantial/finantial.module';
 import { AccessoryModule } from './routes/accessory/accessory.module';
 import { AuthModule } from './routes/auth/auth.module';
 import { RedisModule } from './global/redis/redis.module';
+import { JwtAuthGuard } from './global/guard/jwtAuthGuard.guard';
 @Module({
   imports: [
     HttpModule,
@@ -45,13 +40,8 @@ import { RedisModule } from './global/redis/redis.module';
     AppService,
     ConfigService,
     { provide: APP_FILTER, useClass: PrismaExceptionFilter },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: SsoAuthGuard },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(JwtAuthMiddleware)
-      .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
-  }
-}
+export class AppModule {}

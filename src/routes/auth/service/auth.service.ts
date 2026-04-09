@@ -13,12 +13,18 @@ import crypto from 'node:crypto';
 @Injectable()
 export class AuthService {
   private jwtSecret: string;
+  private ssoUrl: string;
+  private appUrl: string;
+  private appClientId: string;
 
   constructor(
     private config: ConfigService,
     private redis: RedisService,
   ) {
     this.jwtSecret = this.config.getOrThrow('JWT_SECRET');
+    this.ssoUrl = this.config.getOrThrow('SSO_BASE_URL');
+    this.appUrl = this.config.getOrThrow('APP_BASE_URL');
+    this.appClientId = this.config.getOrThrow('APP_CLIENT_ID');
   }
 
   async getToken(
@@ -38,14 +44,14 @@ export class AuthService {
 
     if (!pkce_verifier) throw new UnauthorizedException('Invalid state');
 
-    const sso_token = (await fetch(process.env.SSO_TOKEN_URL ?? '', {
+    const sso_token = (await fetch(`${this.ssoUrl}/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         code,
         code_verifier: pkce_verifier,
-        client_id: process.env.APP_CLIENT_ID,
-        redirect_uri: process.env.SSO_REDIRECT_URI,
+        client_id: this.appClientId,
+        redirect_uri: `${this.appUrl}/auth/callback`,
         grant_type: 'authorization_code',
       }),
     }).then((r) => r.json())) as {
@@ -67,7 +73,7 @@ export class AuthService {
 
     await this.decodeToken(sso_token.access_token, res);
     await this.redis.deletePkceSession(state);
-    res.redirect(process.env.APP_BASE_URL ?? '');
+    res.redirect(`${this.appUrl}/home`);
   }
 
   private async decodeToken(token: string, res: Response): Promise<void> {

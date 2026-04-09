@@ -1,7 +1,0 @@
-$kind: http-request
-name: Update User
-url: "{{base_url}}/user/{{id}}"
-method: PUT
-headers:
-  x-sso-secret: "{{x-sso-secret}}"
-order: 3981812224320452

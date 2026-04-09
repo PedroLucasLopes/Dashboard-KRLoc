@@ -1,9 +1,0 @@
-$kind: http-request
-name: Generate Contract Document
-method: POST
-url: '{{base_url}}/generate/contract/:id'
-order: 1000
-pathVariables:
-  - key: id
-    value: '{{elease_id}}'
-    description: Contract UUID

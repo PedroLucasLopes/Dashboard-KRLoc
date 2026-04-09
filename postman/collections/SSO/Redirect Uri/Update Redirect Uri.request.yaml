@@ -1,5 +1,0 @@
-$kind: http-request
-name: Update Redirect Uri
-url: "{{base_url}}/redirecturi/{{id}}"
-method: PUT
-order: 4371815493967220

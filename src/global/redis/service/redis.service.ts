@@ -5,7 +5,7 @@ import { JwtPayloadAuth } from 'src/global/dto/jwtPayloadAuth.dto';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private redis: Redis;
+  private redis!: Redis;
   constructor(private config: ConfigService) {}
 
   onModuleInit() {

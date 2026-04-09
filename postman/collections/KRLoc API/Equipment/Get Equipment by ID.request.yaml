@@ -1,9 +1,0 @@
-$kind: http-request
-name: Get Equipment by ID
-method: GET
-url: '{{base_url}}/equipment/:id'
-order: 2000
-pathVariables:
-  - key: id
-    value: '{{equipment_id}}'
-    description: Equipment UUID

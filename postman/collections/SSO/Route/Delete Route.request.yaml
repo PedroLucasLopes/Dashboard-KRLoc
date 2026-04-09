@@ -1,7 +1,0 @@
-$kind: http-request
-name: Delete Route
-url: "{{base_url}}/route/{{id}}"
-method: DELETE
-headers:
-  x-sso-secret: "{{x-sso-secret}}"
-order: 4285552878885562

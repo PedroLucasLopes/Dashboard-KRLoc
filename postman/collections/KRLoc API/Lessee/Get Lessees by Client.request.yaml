@@ -1,9 +1,0 @@
-$kind: http-request
-name: Get Lessees by Client
-method: GET
-url: '{{base_url}}/lessee/lesseesbyclient/:clientId'
-order: 3000
-pathVariables:
-  - key: clientId
-    value: '{{client_id}}'
-    description: Client UUID

@@ -1,9 +1,0 @@
-$kind: http-request
-name: Delete Client
-method: DELETE
-url: '{{base_url}}/client/:id'
-order: 5000
-pathVariables:
-  - key: id
-    value: '{{client_id}}'
-    description: Client UUID
