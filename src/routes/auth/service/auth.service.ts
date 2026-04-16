@@ -8,7 +8,11 @@ import { RedisService } from 'src/global/redis/service/redis.service';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayloadAuth } from 'src/global/dto/jwtPayloadAuth.dto';
-import crypto from 'node:crypto';
+import * as crypto from 'node:crypto';
+import { HttpService } from '@nestjs/axios';
+import { SsoToken } from '../dto/ssoToken.dto';
+import { SsoTokenChange } from '../dto/ssoTokenChange.dto';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +24,7 @@ export class AuthService {
   constructor(
     private config: ConfigService,
     private redis: RedisService,
+    private httpService: HttpService,
   ) {
     this.jwtSecret = this.config.getOrThrow('JWT_SECRET');
     this.ssoUrl = this.config.getOrThrow('SSO_BASE_URL');
@@ -33,47 +38,71 @@ export class AuthService {
     code: string,
     state: string,
   ): Promise<void> {
-    if (state !== req.query.state)
-      throw new UnauthorizedException('State mismatch');
+    const pkceSession = (await this.redis.getPkceSession(state)) as {
+      pkce_state: string;
+      pkce_verifier: string;
+    } | null;
 
-    const { pkce_verifier } =
-      ((await this.redis.getPkceSession(state)) as {
-        pkce_state: string;
-        pkce_verifier: string;
-      }) ?? undefined;
+    if (!pkceSession?.pkce_verifier)
+      throw new UnauthorizedException('Invalid state');
 
-    if (!pkce_verifier) throw new UnauthorizedException('Invalid state');
+    const { data } = await firstValueFrom(
+      this.httpService.post<SsoToken>(
+        `${this.ssoUrl}/token`,
+        {
+          code,
+          code_verifier: pkceSession.pkce_verifier,
+          client_id: this.appClientId,
+          redirect_uri: `${this.appUrl}/auth/callback`,
+          grant_type: 'authorization_code',
+        } as SsoTokenChange,
+        {
+          validateStatus: () => true,
+        },
+      ),
+    );
 
-    const sso_token = (await fetch(`${this.ssoUrl}/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code,
-        code_verifier: pkce_verifier,
-        client_id: this.appClientId,
-        redirect_uri: `${this.appUrl}/auth/callback`,
-        grant_type: 'authorization_code',
-      }),
-    }).then((r) => r.json())) as {
-      access_token?: string;
-      token_type?: 'Bearer';
-      expires_in?: number;
-      message?: string;
-      error?: string;
-      statusCode?: number;
-    };
-
-    if (sso_token && sso_token?.error) {
-      throw new BadRequestException(sso_token?.message);
+    if (data.error) {
+      throw new BadRequestException(`${data.message}`);
     }
 
-    if (!sso_token || !sso_token.access_token) {
+    if (!data || !data.access_token) {
       throw new BadRequestException('Failed to obtain access token from SSO');
     }
 
-    await this.decodeToken(sso_token.access_token, res);
+    await this.decodeToken(data.access_token, res);
     await this.redis.deletePkceSession(state);
     res.redirect(`${this.appUrl}/home`);
+  }
+
+  async redirectToSso(req: Request, res: Response): Promise<void> {
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto
+      .createHash('sha256')
+      .update(verifier)
+      .digest('base64url');
+
+    const statePayload = {
+      csrf: crypto.randomBytes(16).toString('hex'),
+    };
+    const state = Buffer.from(JSON.stringify(statePayload)).toString(
+      'base64url',
+    );
+
+    await this.redis.setPkceSession(state, {
+      pkce_state: state,
+      pkce_verifier: verifier,
+    });
+
+    const url = new URL(`${this.ssoUrl}/authorize`);
+    url.searchParams.set('client_id', this.appClientId);
+    url.searchParams.set('redirect_uri', `${this.appUrl}/auth/callback`);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+    url.searchParams.set('state', state);
+
+    res.redirect(url.toString());
   }
 
   private async decodeToken(token: string, res: Response): Promise<void> {
@@ -89,7 +118,7 @@ export class AuthService {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: decoded.exp,
+      maxAge: decoded.exp * 1000 - Date.now(),
     });
 
     await this.redis.setJwtSession(sessionId, decoded);

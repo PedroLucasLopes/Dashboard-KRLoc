@@ -44,7 +44,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       `jwt_app:${token}`,
       JSON.stringify(data),
       'EX',
-      data.exp,
+      data.exp * 1000 - Date.now(),
     );
   }
 

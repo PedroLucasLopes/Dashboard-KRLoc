@@ -36,17 +36,6 @@ export class JwtAuthGuard implements CanActivate {
 
     const token = await this.redis.getJwtSession(sessionId);
 
-    const stateFromQuery = req.query?.state as string;
-
-    if (stateFromQuery) {
-      const stateFromRedis = await this.redis.getPkceSession(stateFromQuery);
-
-      if (!stateFromRedis)
-        throw new UnauthorizedException('Invalid state parameter');
-
-      return true;
-    }
-
     if (!token) {
       throw new UnauthorizedException('Access Denied');
     }

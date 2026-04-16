@@ -7,12 +7,10 @@ import {
   Query,
   Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from '../service/auth.service';
 import { Request, Response } from 'express';
 import { RedisService } from 'src/global/redis/service/redis.service';
-import { SsoAuthGuard } from 'src/global/guard/ssoAuthGuard.guard';
 import { Login } from 'src/global/decorators/public.decorator';
 
 @Controller('auth')
@@ -24,6 +22,7 @@ export class AuthController {
 
   @Get('callback')
   @HttpCode(HttpStatus.OK)
+  @Login()
   async getToken(
     @Req() req: Request,
     @Res() res: Response,
@@ -36,8 +35,9 @@ export class AuthController {
   @Get('login')
   @HttpCode(HttpStatus.OK)
   @Login()
-  @UseGuards(SsoAuthGuard)
-  async login() {}
+  async login(@Req() req: Request, @Res() res: Response) {
+    return this.authService.redirectToSso(req, res);
+  }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
